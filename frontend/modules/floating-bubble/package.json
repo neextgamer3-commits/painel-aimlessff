@@ -1,0 +1,15 @@
+{
+  "name": "floating-bubble",
+  "version": "1.0.0",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "echo 'Local module, no build needed'",
+    "clean": "rm -rf android/build"
+  },
+  "peerDependencies": {
+    "expo": "*",
+    "react": "*",
+    "react-native": "*"
+  }
+}
