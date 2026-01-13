@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  Switch,
   ScrollView,
   Dimensions,
   Platform,
@@ -14,7 +13,7 @@ import {
   AppStateStatus,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { Ionicons, MaterialCommunityIcons, FontAwesome5, Feather } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Animated, { 
   useSharedValue, 
@@ -22,14 +21,19 @@ import Animated, {
   withRepeat,
   withSequence,
   withTiming,
+  withSpring,
+  interpolate,
+  Easing,
+  runOnJS,
 } from "react-native-reanimated";
 
 const { width, height } = Dimensions.get("window");
 
-// Primary accent color - RED
-const PRIMARY_COLOR = "#FF0040";
-const PRIMARY_LIGHT = "rgba(255, 0, 64, 0.15)";
-const PRIMARY_GLOW = "rgba(255, 0, 64, 0.25)";
+// Primary accent color - GREEN NEON
+const PRIMARY_COLOR = "#00FF00";
+const PRIMARY_DARK = "#00CC00";
+const PRIMARY_GLOW = "rgba(0, 255, 0, 0.4)";
+const PRIMARY_LIGHT = "rgba(0, 255, 0, 0.15)";
 
 // Try to import native module (only works in development builds)
 let FloatingBubble: any = null;
@@ -39,7 +43,7 @@ try {
   FloatingBubble = require('../modules/floating-bubble/src').default;
   isNativeModuleAvailable = Platform.OS === 'android';
 } catch (e) {
-  console.log('Native FloatingBubble module not available (expected in Expo Go/Web)');
+  console.log('Native FloatingBubble module not available');
 }
 
 // Menu items for sidebar
@@ -51,309 +55,601 @@ interface MenuItem {
   icon: React.ReactNode;
 }
 
-// Feature item types
-interface CheckboxFeature {
-  id: string;
-  label: string;
-  type: "checkbox";
-  active: boolean;
-}
-
-interface ToggleFeature {
-  id: string;
-  label: string;
-  type: "toggle";
-  active: boolean;
-  icon: React.ReactNode;
-}
-
-type Feature = CheckboxFeature | ToggleFeature;
-
-export default function PainelAimlessFF() {
-  const [isPanelVisible, setIsPanelVisible] = useState(false);
-  const [activeMenu, setActiveMenu] = useState<MenuKey>("principal");
-  const [hasOverlayPermission, setHasOverlayPermission] = useState(false);
-  const [isBubbleActive, setIsBubbleActive] = useState(false);
-  
-  // Animation for floating button
-  const pulseScale = useSharedValue(1);
+// Animated Glow Button Component
+const GlowButton = ({ 
+  onPress, 
+  isActive, 
+  children, 
+  style 
+}: { 
+  onPress: () => void; 
+  isActive?: boolean; 
+  children: React.ReactNode;
+  style?: any;
+}) => {
+  const glowAnim = useSharedValue(0);
   
   useEffect(() => {
-    pulseScale.value = withRepeat(
+    glowAnim.value = withRepeat(
       withSequence(
-        withTiming(1.1, { duration: 1000 }),
-        withTiming(1, { duration: 1000 })
+        withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0, { duration: 1500, easing: Easing.inOut(Easing.ease) })
       ),
       -1,
       true
     );
   }, []);
 
-  // Check overlay permission on mount and app resume
+  const animatedGlow = useAnimatedStyle(() => ({
+    shadowOpacity: interpolate(glowAnim.value, [0, 1], [0.3, 0.8]),
+    shadowRadius: interpolate(glowAnim.value, [0, 1], [5, 15]),
+  }));
+
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.8}>
+      <Animated.View style={[
+        styles.glowButton,
+        isActive && styles.glowButtonActive,
+        animatedGlow,
+        style
+      ]}>
+        {children}
+      </Animated.View>
+    </TouchableOpacity>
+  );
+};
+
+// Custom Toggle Switch Component
+const CustomToggle = ({ value, onToggle }: { value: boolean; onToggle: () => void }) => {
+  const translateX = useSharedValue(value ? 22 : 0);
+  const glowAnim = useSharedValue(0);
+
   useEffect(() => {
-    checkOverlayPermission();
-    
-    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
-      if (nextAppState === 'active') {
-        checkOverlayPermission();
-      }
-    });
+    translateX.value = withSpring(value ? 22 : 0, { damping: 15 });
+    if (value) {
+      glowAnim.value = withRepeat(
+        withSequence(
+          withTiming(1, { duration: 1000 }),
+          withTiming(0.5, { duration: 1000 })
+        ),
+        -1,
+        true
+      );
+    } else {
+      glowAnim.value = 0;
+    }
+  }, [value]);
 
-    return () => {
-      subscription?.remove();
-    };
-  }, []);
+  const thumbStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
 
-  // Setup bubble event listeners
+  const trackGlow = useAnimatedStyle(() => ({
+    shadowOpacity: value ? interpolate(glowAnim.value, [0, 1], [0.5, 1]) : 0,
+    shadowRadius: value ? interpolate(glowAnim.value, [0, 1], [5, 15]) : 0,
+  }));
+
+  return (
+    <TouchableOpacity onPress={onToggle} activeOpacity={0.8}>
+      <Animated.View style={[
+        styles.toggleTrack,
+        value && styles.toggleTrackActive,
+        trackGlow
+      ]}>
+        <Animated.View style={[styles.toggleThumb, thumbStyle]} />
+      </Animated.View>
+    </TouchableOpacity>
+  );
+};
+
+// Code Injection Animation Component
+const CodeInjection = ({ visible, onComplete }: { visible: boolean; onComplete: () => void }) => {
+  const [lines, setLines] = useState<string[]>([]);
+  const scrollRef = useRef<ScrollView>(null);
+  
+  const codeLines = [
+    "const CheatMenu = (() => {",
+    "  const weapons = ",
+    '["Mp40","M1014","UMP","Desert","XM4","Skar","MP5"];',
+    "  const state = {",
+    "    aimlock: true,",
+    "    headshot: true,",
+    "    AIMTRICK: true,",
+    "    AimDispersal: false,",
+    "    sensitivity: 85,",
+    "  };",
+    "",
+    "function initAimAssist() {",
+    "  const target = findNearestEnemy();",
+    "  if (target && target.distance < 100) {",
+    "    adjustAim(target.position);",
+    "    return true;",
+    "  }",
+    "  return false;",
+    "}",
+    "",
+    "function calculateHeadshot(enemy) {",
+    "  const headPos = enemy.skeleton.head;",
+    "  const offset = getRecoilOffset();",
+    "  return { x: headPos.x - offset.x,",
+    "           y: headPos.y - offset.y };",
+    "}",
+    "",
+    "// Inicializando módulos...",
+    "initAimAssist();",
+    "loadWeaponConfigs(weapons);",
+    "activateNoRecoil();",
+    "enableAutoAim();",
+    "",
+    "console.log('IA Injetada com sucesso!');",
+    "return { status: 'ACTIVE' };",
+    "})();",
+  ];
+
   useEffect(() => {
-    if (isNativeModuleAvailable && FloatingBubble) {
-      try {
-        const { addBubblePressListener, addBubbleRemoveListener } = require('../modules/floating-bubble/src');
-        
-        const pressSubscription = addBubblePressListener(() => {
-          // When bubble is pressed, show the panel
-          setIsPanelVisible(true);
-        });
-
-        const removeSubscription = addBubbleRemoveListener(() => {
-          setIsBubbleActive(false);
-        });
-
-        return () => {
-          pressSubscription?.remove();
-          removeSubscription?.remove();
-        };
-      } catch (e) {
-        console.log('Could not setup bubble listeners');
-      }
+    if (visible) {
+      setLines([]);
+      let index = 0;
+      const interval = setInterval(() => {
+        if (index < codeLines.length) {
+          setLines(prev => [...prev, codeLines[index]]);
+          index++;
+          scrollRef.current?.scrollToEnd({ animated: true });
+        } else {
+          clearInterval(interval);
+          setTimeout(onComplete, 1500);
+        }
+      }, 100);
+      return () => clearInterval(interval);
     }
+  }, [visible]);
+
+  if (!visible) return null;
+
+  return (
+    <View style={styles.codeContainer}>
+      <View style={styles.codeHeader}>
+        <View style={styles.codeHeaderIcon}>
+          <Ionicons name="checkmark" size={20} color="#000" />
+        </View>
+        <Text style={styles.codeHeaderText}>Códigos injetados!</Text>
+      </View>
+      <ScrollView 
+        ref={scrollRef}
+        style={styles.codeScroll}
+        showsVerticalScrollIndicator={false}
+      >
+        {lines.map((line, i) => (
+          <Text key={i} style={styles.codeLine}>{line}</Text>
+        ))}
+      </ScrollView>
+      <View style={styles.gunIcon}>
+        <MaterialCommunityIcons name="pistol" size={120} color={PRIMARY_COLOR} />
+      </View>
+    </View>
+  );
+};
+
+// Refresh Rate Selector Component
+const RefreshRateSelector = ({ 
+  visible, 
+  onSelect, 
+  onClose,
+  currentRate 
+}: { 
+  visible: boolean; 
+  onSelect: (rate: number) => void;
+  onClose: () => void;
+  currentRate: number;
+}) => {
+  const rates = [60, 90, 120, 144];
+
+  if (!visible) return null;
+
+  return (
+    <View style={styles.rateSelector}>
+      <Text style={styles.rateSelectorTitle}>TAXA DE ATUALIZAÇÃO</Text>
+      <Text style={styles.rateSelectorSubtitle}>Selecione a taxa de Hz</Text>
+      
+      <View style={styles.rateOptions}>
+        {rates.map((rate) => (
+          <GlowButton 
+            key={rate}
+            onPress={() => onSelect(rate)}
+            isActive={currentRate === rate}
+            style={styles.rateButton}
+          >
+            <Text style={[
+              styles.rateButtonText,
+              currentRate === rate && styles.rateButtonTextActive
+            ]}>
+              {rate}Hz
+            </Text>
+          </GlowButton>
+        ))}
+      </View>
+      
+      <TouchableOpacity style={styles.rateCloseButton} onPress={onClose}>
+        <Text style={styles.rateCloseText}>APLICAR</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+export default function PainelAimlessFF() {
+  const [isPanelVisible, setIsPanelVisible] = useState(false);
+  const [activeMenu, setActiveMenu] = useState<MenuKey>("principal");
+  const [showCodeInjection, setShowCodeInjection] = useState(false);
+  const [showRefreshRate, setShowRefreshRate] = useState(false);
+  const [selectedRefreshRate, setSelectedRefreshRate] = useState(60);
+  const [selectedGelo, setSelectedGelo] = useState<'normal' | 'invertido' | 'reduzido'>('normal');
+  const [iaInjected, setIaInjected] = useState(false);
+  
+  // Feature states
+  const [features, setFeatures] = useState({
+    aimbot: true,
+    aimlock: false,
+    norecoil: false,
+    headshot: false,
+    antiban: true,
+  });
+
+  const pulseScale = useSharedValue(1);
+  
+  useEffect(() => {
+    pulseScale.value = withRepeat(
+      withSequence(
+        withTiming(1.08, { duration: 1200 }),
+        withTiming(1, { duration: 1200 })
+      ),
+      -1,
+      true
+    );
   }, []);
-
-  const checkOverlayPermission = async () => {
-    if (isNativeModuleAvailable && FloatingBubble) {
-      try {
-        const { hasOverlayPermission: checkPermission } = require('../modules/floating-bubble/src');
-        const hasPermission = checkPermission();
-        setHasOverlayPermission(hasPermission);
-      } catch (e) {
-        setHasOverlayPermission(false);
-      }
-    }
-  };
 
   const animatedButtonStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pulseScale.value }],
   }));
 
-  const [features, setFeatures] = useState<Record<MenuKey, Feature[]>>({
-    principal: [
-      { id: "aimbot", label: "Aimbot Rage", type: "checkbox", active: true },
-      { id: "aimlock", label: "Aimlock", type: "checkbox", active: false },
-      { id: "norecoil", label: "No Recoil", type: "checkbox", active: false },
-      {
-        id: "botaotrick",
-        label: "Botão Trick",
-        type: "toggle",
-        active: false,
-        icon: <MaterialCommunityIcons name="target" size={20} color={PRIMARY_COLOR} />,
-      },
-      {
-        id: "mirapro",
-        label: "Mira Pro",
-        type: "toggle",
-        active: false,
-        icon: <MaterialCommunityIcons name="crosshairs-gps" size={20} color={PRIMARY_COLOR} />,
-      },
-    ],
-    configs: [
-      { id: "sensitivity", label: "Sensibilidade", type: "toggle", active: false, icon: <Ionicons name="settings" size={20} color={PRIMARY_COLOR} /> },
-      { id: "fov", label: "Campo de Visão", type: "toggle", active: false, icon: <Ionicons name="eye" size={20} color={PRIMARY_COLOR} /> },
-      { id: "smooth", label: "Smooth Aim", type: "checkbox", active: false },
-    ],
-    gelo: [
-      { id: "freezeplayer", label: "Freeze Player", type: "checkbox", active: false },
-      { id: "slowmo", label: "Slow Motion", type: "toggle", active: false, icon: <Ionicons name="time" size={20} color={PRIMARY_COLOR} /> },
-    ],
-    ia: [
-      { id: "autoaim", label: "Auto Aim IA", type: "checkbox", active: false },
-      { id: "prediction", label: "Predição", type: "toggle", active: false, icon: <MaterialCommunityIcons name="brain" size={20} color={PRIMARY_COLOR} /> },
-    ],
-    otimizar: [
-      { id: "fps", label: "Boost FPS", type: "checkbox", active: false },
-      { id: "ram", label: "Limpar RAM", type: "toggle", active: false, icon: <Ionicons name="flash" size={20} color={PRIMARY_COLOR} /> },
-      { id: "ping", label: "Reduzir Ping", type: "checkbox", active: false },
-    ],
-    mais: [
-      { id: "wallhack", label: "Wallhack", type: "checkbox", active: false },
-      { id: "esp", label: "ESP Player", type: "toggle", active: false, icon: <Ionicons name="eye" size={20} color={PRIMARY_COLOR} /> },
-      { id: "radar", label: "Mini Radar", type: "checkbox", active: false },
-    ],
-  });
-
   const menuItems: MenuItem[] = [
     {
       id: "principal",
       label: "Principal",
-      icon: <FontAwesome5 name="skull" size={18} color={activeMenu === "principal" ? PRIMARY_COLOR : "#888"} />,
+      icon: <FontAwesome5 name="skull" size={16} color={activeMenu === "principal" ? "#000" : "#888"} />,
     },
     {
       id: "configs",
       label: "Configs",
-      icon: <Ionicons name="settings" size={20} color={activeMenu === "configs" ? PRIMARY_COLOR : "#888"} />,
+      icon: <Ionicons name="settings" size={18} color={activeMenu === "configs" ? "#000" : "#888"} />,
     },
     {
       id: "gelo",
       label: "Gelo",
-      icon: <MaterialCommunityIcons name="spray" size={20} color={activeMenu === "gelo" ? PRIMARY_COLOR : "#888"} />,
+      icon: <MaterialCommunityIcons name="spray" size={18} color={activeMenu === "gelo" ? "#000" : "#888"} />,
     },
     {
       id: "ia",
       label: "I.A",
-      icon: <MaterialCommunityIcons name="diamond-stone" size={20} color={activeMenu === "ia" ? PRIMARY_COLOR : "#888"} />,
+      icon: <MaterialCommunityIcons name="diamond-stone" size={18} color={activeMenu === "ia" ? "#000" : "#888"} />,
     },
     {
       id: "otimizar",
       label: "Otimizar",
-      icon: <Ionicons name="flash" size={20} color={activeMenu === "otimizar" ? PRIMARY_COLOR : "#888"} />,
+      icon: <Ionicons name="flash" size={18} color={activeMenu === "otimizar" ? "#000" : "#888"} />,
     },
     {
       id: "mais",
       label: "Mais",
-      icon: <Ionicons name="menu" size={20} color={activeMenu === "mais" ? PRIMARY_COLOR : "#888"} />,
+      icon: <Ionicons name="menu" size={18} color={activeMenu === "mais" ? "#000" : "#888"} />,
     },
   ];
 
-  const toggleFeature = (featureId: string) => {
-    setFeatures((prev) => ({
-      ...prev,
-      [activeMenu]: prev[activeMenu].map((feature) =>
-        feature.id === featureId ? { ...feature, active: !feature.active } : feature
-      ),
-    }));
+  const toggleFeature = (key: keyof typeof features) => {
+    setFeatures(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const requestOverlayPermission = () => {
-    if (Platform.OS === "android") {
-      if (isNativeModuleAvailable && FloatingBubble) {
-        try {
-          const { requestOverlayPermission: requestPerm } = require('../modules/floating-bubble/src');
-          requestPerm();
-          Alert.alert(
-            "Permissão Necessária",
-            "Após conceder a permissão, volte ao app e ative a sobreposição novamente.",
-            [{ text: "OK" }]
-          );
-        } catch (e) {
-          Linking.openSettings();
-        }
-      } else {
-        Alert.alert(
-          "Development Build Necessário",
-          "Para usar a sobreposição real sobre outros apps, você precisa:\n\n1. Criar um Development Build\n2. Instalar o APK no seu dispositivo\n3. Conceder a permissão 'Exibir sobre outros apps'\n\nNo Expo Go, apenas a simulação está disponível.",
-          [
-            { text: "Entendi" },
-            { 
-              text: "Abrir Configurações", 
-              onPress: () => Linking.openSettings()
-            }
-          ]
+  const handleInjectIA = () => {
+    setShowCodeInjection(true);
+  };
+
+  const handleCodeComplete = () => {
+    setShowCodeInjection(false);
+    setIaInjected(true);
+    Alert.alert("Sucesso!", "IA injetada com sucesso! Suas configurações foram aplicadas.");
+  };
+
+  const openYouTube = () => {
+    Linking.openURL('https://www.youtube.com/@AIMLESSREGEDIT');
+  };
+
+  const renderContent = () => {
+    switch (activeMenu) {
+      case "principal":
+        return (
+          <View style={styles.contentArea}>
+            <FeatureRow 
+              label="Aimbot Rage" 
+              active={features.aimbot} 
+              onToggle={() => toggleFeature('aimbot')}
+              hasCheckbox
+            />
+            <FeatureRow 
+              label="Aimlock" 
+              active={features.aimlock} 
+              onToggle={() => toggleFeature('aimlock')}
+              hasCheckbox
+            />
+            <FeatureRow 
+              label="No Recoil" 
+              active={features.norecoil} 
+              onToggle={() => toggleFeature('norecoil')}
+              hasCheckbox
+            />
+            <FeatureRow 
+              label="Headshot" 
+              active={features.headshot} 
+              onToggle={() => toggleFeature('headshot')}
+              hasToggle
+            />
+            <FeatureRow 
+              label="Anti-Ban" 
+              active={features.antiban} 
+              onToggle={() => toggleFeature('antiban')}
+              hasToggle
+            />
+          </View>
         );
-      }
-    } else {
-      Alert.alert(
-        "Não disponível no iOS",
-        "A funcionalidade de sobreposição não está disponível no iOS devido às restrições do sistema Apple."
-      );
-    }
-  };
 
-  const activateFloatingBubble = async () => {
-    if (!isNativeModuleAvailable || !FloatingBubble) {
-      Alert.alert(
-        "Módulo Nativo Não Disponível",
-        "O botão flutuante sobre outros apps só funciona em um Development Build.\n\nPara criar:\n\n• npx expo prebuild\n• npx expo run:android\n\nOu use EAS Build para gerar um APK.",
-        [{ text: "OK" }]
-      );
-      return;
-    }
-
-    try {
-      const { hasOverlayPermission: checkPerm, showBubble, hideBubble } = require('../modules/floating-bubble/src');
-      
-      if (!checkPerm()) {
-        requestOverlayPermission();
-        return;
-      }
-
-      if (isBubbleActive) {
-        hideBubble();
-        setIsBubbleActive(false);
-      } else {
-        await showBubble(50, 200);
-        setIsBubbleActive(true);
-        setIsPanelVisible(false);
-        
-        Alert.alert(
-          "Bolha Ativada!",
-          "O botão flutuante agora aparecerá sobre outros apps. Toque nele para abrir o painel.",
-          [{ text: "OK" }]
+      case "gelo":
+        return (
+          <View style={styles.contentArea}>
+            <View style={styles.geloHeader}>
+              <View style={styles.geloIconContainer}>
+                <MaterialCommunityIcons name="spray" size={24} color={PRIMARY_COLOR} />
+              </View>
+              <Text style={styles.geloTitle}>DEFINA O TIPO DE GELO</Text>
+            </View>
+            
+            <View style={styles.geloImageContainer}>
+              <MaterialCommunityIcons 
+                name="account-cowboy-hat" 
+                size={100} 
+                color={PRIMARY_COLOR} 
+                style={{ opacity: 0.6 }}
+              />
+            </View>
+            
+            <View style={styles.geloOptions}>
+              <GlowButton 
+                onPress={() => setSelectedGelo('normal')}
+                isActive={selectedGelo === 'normal'}
+                style={styles.geloButton}
+              >
+                <Text style={[styles.geloButtonText, selectedGelo === 'normal' && styles.geloButtonTextActive]}>
+                  NORMAL
+                </Text>
+              </GlowButton>
+              
+              <GlowButton 
+                onPress={() => setSelectedGelo('invertido')}
+                isActive={selectedGelo === 'invertido'}
+                style={styles.geloButton}
+              >
+                <Text style={[styles.geloButtonText, selectedGelo === 'invertido' && styles.geloButtonTextActive]}>
+                  INVERTIDO
+                </Text>
+                <MaterialCommunityIcons name="moon-waning-crescent" size={16} color={selectedGelo === 'invertido' ? "#000" : "#fff"} />
+              </GlowButton>
+              
+              <GlowButton 
+                onPress={() => setSelectedGelo('reduzido')}
+                isActive={selectedGelo === 'reduzido'}
+                style={styles.geloButton}
+              >
+                <Text style={[styles.geloButtonText, selectedGelo === 'reduzido' && styles.geloButtonTextActive]}>
+                  REDUZIDO
+                </Text>
+                <MaterialCommunityIcons name="arrow-collapse" size={16} color={selectedGelo === 'reduzido' ? "#000" : "#fff"} />
+              </GlowButton>
+            </View>
+          </View>
         );
-      }
-    } catch (e: any) {
-      Alert.alert("Erro", e.message || "Não foi possível ativar o botão flutuante");
+
+      case "ia":
+        return (
+          <View style={styles.contentArea}>
+            {showCodeInjection ? (
+              <CodeInjection visible={showCodeInjection} onComplete={handleCodeComplete} />
+            ) : (
+              <View style={styles.iaContainer}>
+                <MaterialCommunityIcons name="robot" size={80} color={PRIMARY_COLOR} style={{ opacity: 0.3 }} />
+                <Text style={styles.iaTitle}>INTELIGÊNCIA ARTIFICIAL</Text>
+                <Text style={styles.iaSubtitle}>
+                  {iaInjected 
+                    ? "IA ativa! Seus módulos estão funcionando." 
+                    : "Injete a IA para melhorar sua mira automaticamente"}
+                </Text>
+                
+                <GlowButton 
+                  onPress={handleInjectIA}
+                  isActive={iaInjected}
+                  style={styles.injectButton}
+                >
+                  <MaterialCommunityIcons 
+                    name={iaInjected ? "check-circle" : "needle"} 
+                    size={24} 
+                    color={iaInjected ? "#000" : "#fff"} 
+                  />
+                  <Text style={[styles.injectButtonText, iaInjected && { color: "#000" }]}>
+                    {iaInjected ? "IA INJETADA" : "INJETAR IA"}
+                  </Text>
+                </GlowButton>
+              </View>
+            )}
+          </View>
+        );
+
+      case "otimizar":
+        return (
+          <View style={styles.contentArea}>
+            {showRefreshRate ? (
+              <RefreshRateSelector 
+                visible={showRefreshRate}
+                currentRate={selectedRefreshRate}
+                onSelect={(rate) => setSelectedRefreshRate(rate)}
+                onClose={() => setShowRefreshRate(false)}
+              />
+            ) : (
+              <View style={styles.optimizeContainer}>
+                <MaterialCommunityIcons name="speedometer" size={60} color={PRIMARY_COLOR} style={{ opacity: 0.3 }} />
+                <Text style={styles.optimizeTitle}>OTIMIZAÇÃO DE TELA</Text>
+                
+                <View style={styles.currentRate}>
+                  <Text style={styles.currentRateLabel}>Taxa atual:</Text>
+                  <Text style={styles.currentRateValue}>{selectedRefreshRate}Hz</Text>
+                </View>
+                
+                <GlowButton 
+                  onPress={() => setShowRefreshRate(true)}
+                  style={styles.optimizeButton}
+                >
+                  <Ionicons name="speedometer" size={20} color="#fff" />
+                  <Text style={styles.optimizeButtonText}>ALTERAR TAXA DE Hz</Text>
+                </GlowButton>
+                
+                <GlowButton 
+                  onPress={() => Alert.alert("Otimizado!", "RAM limpa com sucesso!")}
+                  style={[styles.optimizeButton, { marginTop: 12 }]}
+                >
+                  <MaterialCommunityIcons name="memory" size={20} color="#fff" />
+                  <Text style={styles.optimizeButtonText}>LIMPAR RAM</Text>
+                </GlowButton>
+              </View>
+            )}
+          </View>
+        );
+
+      case "mais":
+        return (
+          <View style={styles.contentArea}>
+            <View style={styles.maisContainer}>
+              <View style={styles.maisHeader}>
+                <MaterialCommunityIcons name="information" size={40} color={PRIMARY_COLOR} />
+                <Text style={styles.maisTitle}>INFORMAÇÕES</Text>
+              </View>
+              
+              <View style={styles.maisInfo}>
+                <View style={styles.maisRow}>
+                  <Ionicons name="calendar" size={20} color={PRIMARY_COLOR} />
+                  <Text style={styles.maisLabel}>Última atualização:</Text>
+                  <Text style={styles.maisValue}>13 / 01 / 2026</Text>
+                </View>
+                
+                <View style={styles.maisRow}>
+                  <Ionicons name="code-slash" size={20} color={PRIMARY_COLOR} />
+                  <Text style={styles.maisLabel}>Versão:</Text>
+                  <Text style={styles.maisValue}>5.0</Text>
+                </View>
+                
+                <View style={styles.maisRow}>
+                  <Ionicons name="person" size={20} color={PRIMARY_COLOR} />
+                  <Text style={styles.maisLabel}>Criador:</Text>
+                  <Text style={styles.maisValue}>AimlessFF</Text>
+                </View>
+              </View>
+              
+              <GlowButton onPress={openYouTube} style={styles.youtubeButton}>
+                <Ionicons name="logo-youtube" size={24} color="#FF0000" />
+                <Text style={styles.youtubeButtonText}>CANAL DO CRIADOR</Text>
+              </GlowButton>
+              
+              <Text style={styles.youtubeSub}>@AIMLESSREGEDIT</Text>
+            </View>
+          </View>
+        );
+
+      case "configs":
+        return (
+          <View style={styles.contentArea}>
+            <Text style={styles.sectionTitle}>CONFIGURAÇÕES</Text>
+            <FeatureRow 
+              label="Sensibilidade Auto" 
+              active={true} 
+              onToggle={() => {}}
+              hasToggle
+            />
+            <FeatureRow 
+              label="Campo de Visão" 
+              active={false} 
+              onToggle={() => {}}
+              hasToggle
+            />
+            <FeatureRow 
+              label="Smooth Aim" 
+              active={true} 
+              onToggle={() => {}}
+              hasToggle
+            />
+          </View>
+        );
+
+      default:
+        return null;
     }
   };
 
-  const minimizeToOverlay = () => {
-    if (isNativeModuleAvailable && hasOverlayPermission) {
-      activateFloatingBubble();
-    } else {
-      setIsPanelVisible(false);
-    }
-  };
-
-  const renderCheckbox = (active: boolean) => (
-    <View style={[styles.checkbox, active && styles.checkboxActive]}>
-      {active && <Ionicons name="checkmark" size={18} color="#fff" />}
-    </View>
-  );
-
-  const renderFeatureIcon = (feature: Feature) => {
-    if (feature.type === "toggle" && "icon" in feature) {
-      return (
-        <View style={styles.featureIconContainer}>
-          {feature.icon}
+  const FeatureRow = ({ 
+    label, 
+    active, 
+    onToggle, 
+    hasCheckbox,
+    hasToggle 
+  }: { 
+    label: string; 
+    active: boolean; 
+    onToggle: () => void;
+    hasCheckbox?: boolean;
+    hasToggle?: boolean;
+  }) => (
+    <View style={styles.featureRow}>
+      <View style={styles.featureLeft}>
+        {hasCheckbox && (
+          <TouchableOpacity onPress={onToggle}>
+            <View style={[styles.checkbox, active && styles.checkboxActive]}>
+              {active && <Ionicons name="checkmark" size={16} color="#000" />}
+            </View>
+          </TouchableOpacity>
+        )}
+        <Text style={styles.featureLabel}>{label}</Text>
+      </View>
+      <View style={styles.featureRight}>
+        <View style={[styles.statusBadge, active ? styles.statusActive : styles.statusInactive]}>
+          <Text style={[styles.statusText, active ? styles.statusTextActive : styles.statusTextInactive]}>
+            {active ? "ATIVO" : "DESATIVADO"}
+          </Text>
         </View>
-      );
-    }
-    return null;
-  };
-
-  const renderStatusBadge = (active: boolean) => (
-    <View style={[styles.statusBadge, active ? styles.statusActive : styles.statusInactive]}>
-      <Text style={[styles.statusText, active ? styles.statusTextActive : styles.statusTextInactive]}>
-        {active ? "ATIVO" : "DESATIVADO"}
-      </Text>
+        {hasToggle && <CustomToggle value={active} onToggle={onToggle} />}
+      </View>
     </View>
   );
 
   const renderPanel = () => (
-    <View style={styles.panel}>
+    <View style={styles.panelLandscape}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>PAINEL AimlessFF</Text>
+        <Text style={styles.headerTitle}>PAINEL AimlessFF 5.0</Text>
         <View style={styles.headerButtons}>
-          <TouchableOpacity style={styles.headerButton} onPress={minimizeToOverlay}>
-            <MaterialCommunityIcons name="picture-in-picture-bottom-right" size={22} color="#fff" />
+          <TouchableOpacity style={styles.headerButton}>
+            <MaterialCommunityIcons name="arrow-collapse" size={20} color="#000" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.headerButton} onPress={() => setIsPanelVisible(false)}>
-            <Ionicons name="close" size={24} color="#fff" />
+            <Ionicons name="close" size={22} color="#000" />
           </TouchableOpacity>
         </View>
       </View>
 
       {/* Content Area */}
-      <View style={styles.content}>
+      <View style={styles.contentWrapper}>
         {/* Sidebar */}
         <View style={styles.sidebar}>
           {menuItems.map((item) => (
@@ -377,106 +673,24 @@ export default function PainelAimlessFF() {
 
         {/* Main Content */}
         <ScrollView style={styles.mainContent} showsVerticalScrollIndicator={false}>
-          {features[activeMenu].map((feature) => (
-            <TouchableOpacity
-              key={feature.id}
-              style={styles.featureRow}
-              onPress={() => feature.type === "checkbox" && toggleFeature(feature.id)}
-              activeOpacity={feature.type === "checkbox" ? 0.7 : 1}
-            >
-              <View style={styles.featureLeft}>
-                {feature.type === "checkbox" ? (
-                  renderCheckbox(feature.active)
-                ) : (
-                  renderFeatureIcon(feature)
-                )}
-                <Text style={styles.featureLabel}>{feature.label}</Text>
-              </View>
-
-              <View style={styles.featureRight}>
-                {renderStatusBadge(feature.active)}
-                {feature.type === "toggle" && (
-                  <Switch
-                    value={feature.active}
-                    onValueChange={() => toggleFeature(feature.id)}
-                    trackColor={{ false: "#333", true: PRIMARY_COLOR }}
-                    thumbColor={feature.active ? "#fff" : "#888"}
-                    ios_backgroundColor="#333"
-                    style={styles.switch}
-                  />
-                )}
-              </View>
-            </TouchableOpacity>
-          ))}
+          {renderContent()}
         </ScrollView>
-      </View>
-
-      {/* Overlay Controls */}
-      <View style={styles.overlayControls}>
-        <TouchableOpacity 
-          style={[styles.overlayButton, isBubbleActive && styles.overlayButtonActive]} 
-          onPress={activateFloatingBubble}
-        >
-          <MaterialCommunityIcons 
-            name={isBubbleActive ? "close-circle" : "layers"} 
-            size={18} 
-            color={isBubbleActive ? "#fff" : PRIMARY_COLOR} 
-          />
-          <Text style={[styles.overlayButtonText, isBubbleActive && styles.overlayButtonTextActive]}>
-            {isBubbleActive ? "Desativar Bolha" : "Ativar Sobreposição"}
-          </Text>
-        </TouchableOpacity>
-        
-        {Platform.OS === 'android' && (
-          <TouchableOpacity style={styles.permissionButton} onPress={requestOverlayPermission}>
-            <Ionicons name="settings-outline" size={16} color="#888" />
-            <Text style={styles.permissionButtonText}>
-              {hasOverlayPermission ? "Permissão OK" : "Dar Permissão"}
-            </Text>
-            {hasOverlayPermission && (
-              <View style={styles.permissionDot} />
-            )}
-          </TouchableOpacity>
-        )}
       </View>
     </View>
   );
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="light" />
+      <StatusBar style="light" hidden={isPanelVisible} />
       
-      {/* Background with floating button when panel is closed */}
       {!isPanelVisible ? (
         <View style={styles.floatingContainer}>
           <View style={styles.backgroundInfo}>
             <MaterialCommunityIcons name="gamepad-variant" size={80} color="#333" />
             <Text style={styles.backgroundTitle}>AimlessFF</Text>
-            <Text style={styles.backgroundSubtitle}>Toque no botão vermelho para abrir o painel</Text>
-            
-            {/* Native module status */}
-            <View style={styles.statusContainer}>
-              <View style={[styles.statusDot, isNativeModuleAvailable ? styles.statusDotActive : styles.statusDotInactive]} />
-              <Text style={styles.statusLabel}>
-                {isNativeModuleAvailable 
-                  ? "Módulo nativo disponível" 
-                  : "Modo simulação (Expo Go)"}
-              </Text>
-            </View>
-            
-            {Platform.OS === 'android' && isNativeModuleAvailable && (
-              <View style={styles.statusContainer}>
-                <View style={[styles.statusDot, hasOverlayPermission ? styles.statusDotActive : styles.statusDotInactive]} />
-                <Text style={styles.statusLabel}>
-                  {hasOverlayPermission 
-                    ? "Permissão de overlay concedida" 
-                    : "Permissão de overlay pendente"}
-                </Text>
-              </View>
-            )}
+            <Text style={styles.backgroundSubtitle}>Toque no botão para abrir o painel</Text>
           </View>
           
-          {/* Floating Button */}
           <Animated.View style={[styles.floatingButtonContainer, animatedButtonStyle]}>
             <TouchableOpacity
               style={styles.floatingButton}
@@ -484,22 +698,12 @@ export default function PainelAimlessFF() {
               activeOpacity={0.8}
             >
               <View style={styles.floatingButtonInner}>
-                <MaterialCommunityIcons name="crosshairs-gps" size={32} color="#fff" />
+                <MaterialCommunityIcons name="crosshairs-gps" size={32} color="#000" />
               </View>
             </TouchableOpacity>
           </Animated.View>
           
           <Text style={styles.floatingHint}>Toque para abrir</Text>
-          
-          {/* Instructions for development build */}
-          <View style={styles.instructionsContainer}>
-            <Text style={styles.instructionsTitle}>Para sobreposição real:</Text>
-            <Text style={styles.instructionsText}>
-              {Platform.OS === 'android' 
-                ? "1. Execute: npx expo prebuild\n2. Execute: npx expo run:android\n3. Conceda permissão de overlay"
-                : "Funcionalidade não disponível no iOS"}
-            </Text>
-          </View>
         </View>
       ) : (
         <View style={styles.container}>
@@ -513,13 +717,13 @@ export default function PainelAimlessFF() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#0a0a0a",
+    backgroundColor: "#000",
   },
   floatingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#0a0a0a",
+    backgroundColor: "#000",
   },
   backgroundInfo: {
     alignItems: "center",
@@ -536,36 +740,10 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
     marginTop: 8,
-    textAlign: "center",
-  },
-  statusContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: "#1a1a1a",
-    borderRadius: 20,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 8,
-  },
-  statusDotActive: {
-    backgroundColor: "#00FF00",
-  },
-  statusDotInactive: {
-    backgroundColor: "#FF6600",
-  },
-  statusLabel: {
-    fontSize: 12,
-    color: "#888",
   },
   floatingButtonContainer: {
     position: "absolute",
-    bottom: 180,
+    bottom: 150,
   },
   floatingButton: {
     width: 80,
@@ -574,17 +752,11 @@ const styles = StyleSheet.create({
     backgroundColor: PRIMARY_COLOR,
     justifyContent: "center",
     alignItems: "center",
-    ...Platform.select({
-      ios: {
-        shadowColor: PRIMARY_COLOR,
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.8,
-        shadowRadius: 20,
-      },
-      android: {
-        elevation: 15,
-      },
-    }),
+    shadowColor: PRIMARY_COLOR,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 20,
+    elevation: 15,
   },
   floatingButtonInner: {
     width: 70,
@@ -594,59 +766,31 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 3,
-    borderColor: "rgba(255,255,255,0.3)",
+    borderColor: "rgba(0,0,0,0.2)",
   },
   floatingHint: {
     position: "absolute",
-    bottom: 140,
+    bottom: 110,
     fontSize: 12,
     color: "#666",
   },
-  instructionsContainer: {
-    position: "absolute",
-    bottom: 40,
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    backgroundColor: "#111",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#333",
-    marginHorizontal: 20,
-  },
-  instructionsTitle: {
-    fontSize: 12,
-    fontWeight: "bold",
-    color: PRIMARY_COLOR,
-    marginBottom: 8,
-  },
-  instructionsText: {
-    fontSize: 11,
-    color: "#888",
-    lineHeight: 18,
-  },
   container: {
     flex: 1,
-    padding: 8,
-    backgroundColor: "#0a0a0a",
+    backgroundColor: "transparent",
   },
-  panel: {
+  panelLandscape: {
     flex: 1,
-    backgroundColor: "#111",
+    backgroundColor: "#0a0a0a",
     borderRadius: 16,
+    margin: 8,
     overflow: "hidden",
     borderWidth: 2,
     borderColor: PRIMARY_COLOR,
-    ...Platform.select({
-      ios: {
-        shadowColor: PRIMARY_COLOR,
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.4,
-        shadowRadius: 15,
-      },
-      android: {
-        elevation: 10,
-      },
-    }),
+    shadowColor: PRIMARY_COLOR,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 10,
   },
   header: {
     flexDirection: "row",
@@ -654,12 +798,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: PRIMARY_COLOR,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "bold",
-    color: "#fff",
+    color: "#000",
     letterSpacing: 1,
   },
   headerButtons: {
@@ -669,13 +813,13 @@ const styles = StyleSheet.create({
   headerButton: {
     padding: 4,
   },
-  content: {
+  contentWrapper: {
     flex: 1,
     flexDirection: "row",
   },
   sidebar: {
-    width: 95,
-    paddingVertical: 16,
+    width: 90,
+    paddingVertical: 12,
     paddingHorizontal: 6,
     backgroundColor: "#0d0d0d",
   },
@@ -683,16 +827,15 @@ const styles = StyleSheet.create({
     flexDirection: "column",
     alignItems: "center",
     paddingVertical: 8,
-    paddingHorizontal: 4,
     borderRadius: 8,
-    marginBottom: 6,
+    marginBottom: 4,
   },
   menuItemActive: {
-    backgroundColor: "rgba(255, 0, 64, 0.1)",
+    backgroundColor: "rgba(0, 255, 0, 0.1)",
   },
   menuIconContainer: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
     borderRadius: 10,
     backgroundColor: "#2a2a2a",
     justifyContent: "center",
@@ -703,10 +846,9 @@ const styles = StyleSheet.create({
     backgroundColor: PRIMARY_COLOR,
   },
   menuLabel: {
-    fontSize: 10,
+    fontSize: 9,
     color: "#888",
     fontWeight: "500",
-    textAlign: "center",
   },
   menuLabelActive: {
     color: PRIMARY_COLOR,
@@ -715,18 +857,27 @@ const styles = StyleSheet.create({
   divider: {
     width: 1,
     backgroundColor: "#333",
-    marginVertical: 16,
+    marginVertical: 12,
   },
   mainContent: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingVertical: 12,
+  },
+  contentArea: {
+    flex: 1,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: PRIMARY_COLOR,
+    marginBottom: 16,
   },
   featureRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 14,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#1a1a1a",
   },
@@ -741,116 +892,327 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   checkbox: {
-    width: 26,
-    height: 26,
+    width: 24,
+    height: 24,
     borderWidth: 2,
     borderColor: PRIMARY_COLOR,
     borderRadius: 4,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
-    backgroundColor: "transparent",
   },
   checkboxActive: {
     backgroundColor: PRIMARY_COLOR,
   },
-  featureIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 20,
-    backgroundColor: PRIMARY_LIGHT,
-    borderWidth: 2,
-    borderColor: PRIMARY_COLOR,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
   featureLabel: {
-    fontSize: 15,
+    fontSize: 14,
     color: "#fff",
     fontWeight: "500",
   },
   statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 6,
-    minWidth: 90,
+    minWidth: 85,
     alignItems: "center",
   },
   statusActive: {
-    backgroundColor: PRIMARY_GLOW,
+    backgroundColor: "rgba(0, 255, 0, 0.2)",
   },
   statusInactive: {
-    backgroundColor: "rgba(100, 100, 100, 0.3)",
+    backgroundColor: "rgba(255, 150, 150, 0.2)",
   },
   statusText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "bold",
-    letterSpacing: 0.5,
   },
   statusTextActive: {
     color: PRIMARY_COLOR,
   },
   statusTextInactive: {
-    color: "#888",
+    color: "#ff9090",
   },
-  switch: {
-    transform: [{ scale: 0.9 }],
+  // Custom Toggle
+  toggleTrack: {
+    width: 50,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#333",
+    justifyContent: "center",
+    padding: 3,
+    shadowColor: PRIMARY_COLOR,
   },
-  overlayControls: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#0a0a0a",
-    borderTopWidth: 1,
-    borderTopColor: "#222",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: 10,
+  toggleTrackActive: {
+    backgroundColor: PRIMARY_COLOR,
   },
-  overlayButton: {
-    flex: 1,
+  toggleThumb: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#000",
+  },
+  // Glow Button
+  glowButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255, 0, 64, 0.1)",
+    backgroundColor: "#2a2a2a",
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 25,
     borderWidth: 1,
-    borderColor: PRIMARY_COLOR,
+    borderColor: "#444",
     gap: 8,
+    shadowColor: PRIMARY_COLOR,
+    shadowOffset: { width: 0, height: 0 },
   },
-  overlayButtonActive: {
+  glowButtonActive: {
     backgroundColor: PRIMARY_COLOR,
     borderColor: PRIMARY_COLOR,
   },
-  overlayButtonText: {
-    color: PRIMARY_COLOR,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  overlayButtonTextActive: {
-    color: "#fff",
-  },
-  permissionButton: {
+  // Gelo Section
+  geloHeader: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#1a1a1a",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
-    gap: 6,
+    marginBottom: 20,
+    gap: 12,
   },
-  permissionButtonText: {
+  geloIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: PRIMARY_COLOR,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  geloTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#fff",
+  },
+  geloImageContainer: {
+    alignItems: "center",
+    marginVertical: 20,
+  },
+  geloOptions: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 10,
+    flexWrap: "wrap",
+  },
+  geloButton: {
+    minWidth: 100,
+  },
+  geloButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 12,
+  },
+  geloButtonTextActive: {
+    color: "#000",
+  },
+  // IA Section
+  iaContainer: {
+    alignItems: "center",
+    paddingVertical: 20,
+  },
+  iaTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: PRIMARY_COLOR,
+    marginTop: 16,
+  },
+  iaSubtitle: {
+    fontSize: 12,
     color: "#888",
-    fontSize: 11,
+    marginTop: 8,
+    textAlign: "center",
   },
-  permissionDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#00FF00",
-    marginLeft: 4,
+  injectButton: {
+    marginTop: 24,
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+  },
+  injectButtonText: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#fff",
+  },
+  // Code Injection
+  codeContainer: {
+    flex: 1,
+    backgroundColor: "#000",
+    borderRadius: 8,
+    padding: 16,
+  },
+  codeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: PRIMARY_COLOR,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 25,
+    alignSelf: "flex-start",
+    marginBottom: 16,
+    gap: 8,
+  },
+  codeHeaderIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#000",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  codeHeaderText: {
+    color: "#000",
+    fontWeight: "bold",
+    fontSize: 14,
+  },
+  codeScroll: {
+    flex: 1,
+  },
+  codeLine: {
+    color: PRIMARY_COLOR,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 11,
+    lineHeight: 18,
+  },
+  gunIcon: {
+    position: "absolute",
+    right: 10,
+    bottom: 10,
+    opacity: 0.8,
+  },
+  // Refresh Rate
+  rateSelector: {
+    alignItems: "center",
+    paddingVertical: 20,
+  },
+  rateSelectorTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: PRIMARY_COLOR,
+  },
+  rateSelectorSubtitle: {
+    fontSize: 12,
+    color: "#888",
+    marginTop: 4,
+  },
+  rateOptions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 12,
+    marginTop: 24,
+  },
+  rateButton: {
+    minWidth: 80,
+  },
+  rateButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 14,
+  },
+  rateButtonTextActive: {
+    color: "#000",
+  },
+  rateCloseButton: {
+    backgroundColor: PRIMARY_COLOR,
+    paddingHorizontal: 40,
+    paddingVertical: 12,
+    borderRadius: 25,
+    marginTop: 24,
+  },
+  rateCloseText: {
+    color: "#000",
+    fontWeight: "bold",
+  },
+  // Optimize
+  optimizeContainer: {
+    alignItems: "center",
+    paddingVertical: 20,
+  },
+  optimizeTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: PRIMARY_COLOR,
+    marginTop: 12,
+  },
+  currentRate: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 16,
+    gap: 8,
+  },
+  currentRateLabel: {
+    color: "#888",
+    fontSize: 14,
+  },
+  currentRateValue: {
+    color: PRIMARY_COLOR,
+    fontSize: 24,
+    fontWeight: "bold",
+  },
+  optimizeButton: {
+    marginTop: 20,
+    paddingHorizontal: 24,
+  },
+  optimizeButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+  },
+  // Mais Section
+  maisContainer: {
+    alignItems: "center",
+    paddingVertical: 10,
+  },
+  maisHeader: {
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  maisTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: PRIMARY_COLOR,
+    marginTop: 8,
+  },
+  maisInfo: {
+    width: "100%",
+    backgroundColor: "#1a1a1a",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+  },
+  maisRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    gap: 10,
+  },
+  maisLabel: {
+    color: "#888",
+    fontSize: 13,
+    flex: 1,
+  },
+  maisValue: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "bold",
+  },
+  youtubeButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    backgroundColor: "#1a1a1a",
+    borderColor: "#FF0000",
+  },
+  youtubeButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+  },
+  youtubeSub: {
+    color: "#666",
+    fontSize: 12,
+    marginTop: 8,
   },
 });
