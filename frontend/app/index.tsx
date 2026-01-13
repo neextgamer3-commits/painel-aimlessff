@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,9 +8,10 @@ import {
   ScrollView,
   Dimensions,
   Platform,
-  Modal,
   Alert,
   Linking,
+  AppState,
+  AppStateStatus,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons, MaterialCommunityIcons, FontAwesome5, Feather } from "@expo/vector-icons";
@@ -18,7 +19,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import Animated, { 
   useSharedValue, 
   useAnimatedStyle, 
-  withSpring,
   withRepeat,
   withSequence,
   withTiming,
@@ -30,6 +30,17 @@ const { width, height } = Dimensions.get("window");
 const PRIMARY_COLOR = "#FF0040";
 const PRIMARY_LIGHT = "rgba(255, 0, 64, 0.15)";
 const PRIMARY_GLOW = "rgba(255, 0, 64, 0.25)";
+
+// Try to import native module (only works in development builds)
+let FloatingBubble: any = null;
+let isNativeModuleAvailable = false;
+
+try {
+  FloatingBubble = require('../modules/floating-bubble/src').default;
+  isNativeModuleAvailable = Platform.OS === 'android';
+} catch (e) {
+  console.log('Native FloatingBubble module not available (expected in Expo Go/Web)');
+}
 
 // Menu items for sidebar
 type MenuKey = "principal" | "configs" | "gelo" | "ia" | "otimizar" | "mais";
@@ -61,11 +72,13 @@ type Feature = CheckboxFeature | ToggleFeature;
 export default function PainelAimlessFF() {
   const [isPanelVisible, setIsPanelVisible] = useState(false);
   const [activeMenu, setActiveMenu] = useState<MenuKey>("principal");
+  const [hasOverlayPermission, setHasOverlayPermission] = useState(false);
+  const [isBubbleActive, setIsBubbleActive] = useState(false);
   
   // Animation for floating button
   const pulseScale = useSharedValue(1);
   
-  React.useEffect(() => {
+  useEffect(() => {
     pulseScale.value = withRepeat(
       withSequence(
         withTiming(1.1, { duration: 1000 }),
@@ -75,6 +88,58 @@ export default function PainelAimlessFF() {
       true
     );
   }, []);
+
+  // Check overlay permission on mount and app resume
+  useEffect(() => {
+    checkOverlayPermission();
+    
+    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active') {
+        checkOverlayPermission();
+      }
+    });
+
+    return () => {
+      subscription?.remove();
+    };
+  }, []);
+
+  // Setup bubble event listeners
+  useEffect(() => {
+    if (isNativeModuleAvailable && FloatingBubble) {
+      try {
+        const { addBubblePressListener, addBubbleRemoveListener } = require('../modules/floating-bubble/src');
+        
+        const pressSubscription = addBubblePressListener(() => {
+          // When bubble is pressed, show the panel
+          setIsPanelVisible(true);
+        });
+
+        const removeSubscription = addBubbleRemoveListener(() => {
+          setIsBubbleActive(false);
+        });
+
+        return () => {
+          pressSubscription?.remove();
+          removeSubscription?.remove();
+        };
+      } catch (e) {
+        console.log('Could not setup bubble listeners');
+      }
+    }
+  }, []);
+
+  const checkOverlayPermission = async () => {
+    if (isNativeModuleAvailable && FloatingBubble) {
+      try {
+        const { hasOverlayPermission: checkPermission } = require('../modules/floating-bubble/src');
+        const hasPermission = checkPermission();
+        setHasOverlayPermission(hasPermission);
+      } catch (e) {
+        setHasOverlayPermission(false);
+      }
+    }
+  };
 
   const animatedButtonStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pulseScale.value }],
@@ -169,31 +234,87 @@ export default function PainelAimlessFF() {
 
   const requestOverlayPermission = () => {
     if (Platform.OS === "android") {
-      Alert.alert(
-        "Permissão de Sobreposição",
-        "Para usar o painel sobre outros apps, você precisa conceder a permissão de 'Exibir sobre outros apps' nas configurações.\n\nDeseja abrir as configurações?",
-        [
-          { text: "Cancelar", style: "cancel" },
-          { 
-            text: "Abrir Configurações", 
-            onPress: () => {
-              // Tenta abrir as configurações de overlay do Android
-              Linking.openSettings();
+      if (isNativeModuleAvailable && FloatingBubble) {
+        try {
+          const { requestOverlayPermission: requestPerm } = require('../modules/floating-bubble/src');
+          requestPerm();
+          Alert.alert(
+            "Permissão Necessária",
+            "Após conceder a permissão, volte ao app e ative a sobreposição novamente.",
+            [{ text: "OK" }]
+          );
+        } catch (e) {
+          Linking.openSettings();
+        }
+      } else {
+        Alert.alert(
+          "Development Build Necessário",
+          "Para usar a sobreposição real sobre outros apps, você precisa:\n\n1. Criar um Development Build\n2. Instalar o APK no seu dispositivo\n3. Conceder a permissão 'Exibir sobre outros apps'\n\nNo Expo Go, apenas a simulação está disponível.",
+          [
+            { text: "Entendi" },
+            { 
+              text: "Abrir Configurações", 
+              onPress: () => Linking.openSettings()
             }
-          },
-        ]
-      );
+          ]
+        );
+      }
     } else {
       Alert.alert(
-        "Não disponível",
-        "A funcionalidade de sobreposição não está disponível no iOS devido às restrições do sistema."
+        "Não disponível no iOS",
+        "A funcionalidade de sobreposição não está disponível no iOS devido às restrições do sistema Apple."
       );
+    }
+  };
+
+  const activateFloatingBubble = async () => {
+    if (!isNativeModuleAvailable || !FloatingBubble) {
+      Alert.alert(
+        "Módulo Nativo Não Disponível",
+        "O botão flutuante sobre outros apps só funciona em um Development Build.\n\nPara criar:\n\n• npx expo prebuild\n• npx expo run:android\n\nOu use EAS Build para gerar um APK.",
+        [{ text: "OK" }]
+      );
+      return;
+    }
+
+    try {
+      const { hasOverlayPermission: checkPerm, showBubble, hideBubble } = require('../modules/floating-bubble/src');
+      
+      if (!checkPerm()) {
+        requestOverlayPermission();
+        return;
+      }
+
+      if (isBubbleActive) {
+        hideBubble();
+        setIsBubbleActive(false);
+      } else {
+        await showBubble(50, 200);
+        setIsBubbleActive(true);
+        setIsPanelVisible(false);
+        
+        Alert.alert(
+          "Bolha Ativada!",
+          "O botão flutuante agora aparecerá sobre outros apps. Toque nele para abrir o painel.",
+          [{ text: "OK" }]
+        );
+      }
+    } catch (e: any) {
+      Alert.alert("Erro", e.message || "Não foi possível ativar o botão flutuante");
+    }
+  };
+
+  const minimizeToOverlay = () => {
+    if (isNativeModuleAvailable && hasOverlayPermission) {
+      activateFloatingBubble();
+    } else {
+      setIsPanelVisible(false);
     }
   };
 
   const renderCheckbox = (active: boolean) => (
     <View style={[styles.checkbox, active && styles.checkboxActive]}>
-      {active && <Ionicons name="checkmark" size={18} color="#000" />}
+      {active && <Ionicons name="checkmark" size={18} color="#fff" />}
     </View>
   );
 
@@ -222,8 +343,8 @@ export default function PainelAimlessFF() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>PAINEL AimlessFF</Text>
         <View style={styles.headerButtons}>
-          <TouchableOpacity style={styles.headerButton} onPress={requestOverlayPermission}>
-            <MaterialCommunityIcons name="cellphone-screenshot" size={22} color="#fff" />
+          <TouchableOpacity style={styles.headerButton} onPress={minimizeToOverlay}>
+            <MaterialCommunityIcons name="picture-in-picture-bottom-right" size={22} color="#fff" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.headerButton} onPress={() => setIsPanelVisible(false)}>
             <Ionicons name="close" size={24} color="#fff" />
@@ -290,12 +411,33 @@ export default function PainelAimlessFF() {
         </ScrollView>
       </View>
 
-      {/* Info about overlay */}
-      <View style={styles.overlayInfo}>
-        <TouchableOpacity style={styles.overlayButton} onPress={requestOverlayPermission}>
-          <MaterialCommunityIcons name="layers" size={16} color={PRIMARY_COLOR} />
-          <Text style={styles.overlayButtonText}>Ativar Sobreposição</Text>
+      {/* Overlay Controls */}
+      <View style={styles.overlayControls}>
+        <TouchableOpacity 
+          style={[styles.overlayButton, isBubbleActive && styles.overlayButtonActive]} 
+          onPress={activateFloatingBubble}
+        >
+          <MaterialCommunityIcons 
+            name={isBubbleActive ? "close-circle" : "layers"} 
+            size={18} 
+            color={isBubbleActive ? "#fff" : PRIMARY_COLOR} 
+          />
+          <Text style={[styles.overlayButtonText, isBubbleActive && styles.overlayButtonTextActive]}>
+            {isBubbleActive ? "Desativar Bolha" : "Ativar Sobreposição"}
+          </Text>
         </TouchableOpacity>
+        
+        {Platform.OS === 'android' && (
+          <TouchableOpacity style={styles.permissionButton} onPress={requestOverlayPermission}>
+            <Ionicons name="settings-outline" size={16} color="#888" />
+            <Text style={styles.permissionButtonText}>
+              {hasOverlayPermission ? "Permissão OK" : "Dar Permissão"}
+            </Text>
+            {hasOverlayPermission && (
+              <View style={styles.permissionDot} />
+            )}
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -311,6 +453,27 @@ export default function PainelAimlessFF() {
             <MaterialCommunityIcons name="gamepad-variant" size={80} color="#333" />
             <Text style={styles.backgroundTitle}>AimlessFF</Text>
             <Text style={styles.backgroundSubtitle}>Toque no botão vermelho para abrir o painel</Text>
+            
+            {/* Native module status */}
+            <View style={styles.statusContainer}>
+              <View style={[styles.statusDot, isNativeModuleAvailable ? styles.statusDotActive : styles.statusDotInactive]} />
+              <Text style={styles.statusLabel}>
+                {isNativeModuleAvailable 
+                  ? "Módulo nativo disponível" 
+                  : "Modo simulação (Expo Go)"}
+              </Text>
+            </View>
+            
+            {Platform.OS === 'android' && isNativeModuleAvailable && (
+              <View style={styles.statusContainer}>
+                <View style={[styles.statusDot, hasOverlayPermission ? styles.statusDotActive : styles.statusDotInactive]} />
+                <Text style={styles.statusLabel}>
+                  {hasOverlayPermission 
+                    ? "Permissão de overlay concedida" 
+                    : "Permissão de overlay pendente"}
+                </Text>
+              </View>
+            )}
           </View>
           
           {/* Floating Button */}
@@ -327,24 +490,22 @@ export default function PainelAimlessFF() {
           </Animated.View>
           
           <Text style={styles.floatingHint}>Toque para abrir</Text>
+          
+          {/* Instructions for development build */}
+          <View style={styles.instructionsContainer}>
+            <Text style={styles.instructionsTitle}>Para sobreposição real:</Text>
+            <Text style={styles.instructionsText}>
+              {Platform.OS === 'android' 
+                ? "1. Execute: npx expo prebuild\n2. Execute: npx expo run:android\n3. Conceda permissão de overlay"
+                : "Funcionalidade não disponível no iOS"}
+            </Text>
+          </View>
         </View>
       ) : (
         <View style={styles.container}>
           {renderPanel()}
         </View>
       )}
-
-      {/* Modal overlay simulation */}
-      <Modal
-        visible={false}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-      >
-        <View style={styles.modalOverlay}>
-          {renderPanel()}
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -377,9 +538,34 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: "center",
   },
+  statusContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: "#1a1a1a",
+    borderRadius: 20,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  statusDotActive: {
+    backgroundColor: "#00FF00",
+  },
+  statusDotInactive: {
+    backgroundColor: "#FF6600",
+  },
+  statusLabel: {
+    fontSize: 12,
+    color: "#888",
+  },
   floatingButtonContainer: {
     position: "absolute",
-    bottom: 150,
+    bottom: 180,
   },
   floatingButton: {
     width: 80,
@@ -412,9 +598,31 @@ const styles = StyleSheet.create({
   },
   floatingHint: {
     position: "absolute",
-    bottom: 100,
+    bottom: 140,
     fontSize: 12,
     color: "#666",
+  },
+  instructionsContainer: {
+    position: "absolute",
+    bottom: 40,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    backgroundColor: "#111",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#333",
+    marginHorizontal: 20,
+  },
+  instructionsTitle: {
+    fontSize: 12,
+    fontWeight: "bold",
+    color: PRIMARY_COLOR,
+    marginBottom: 8,
+  },
+  instructionsText: {
+    fontSize: 11,
+    color: "#888",
+    lineHeight: 18,
   },
   container: {
     flex: 1,
@@ -589,33 +797,60 @@ const styles = StyleSheet.create({
   switch: {
     transform: [{ scale: 0.9 }],
   },
-  overlayInfo: {
+  overlayControls: {
     paddingHorizontal: 16,
     paddingVertical: 12,
     backgroundColor: "#0a0a0a",
     borderTopWidth: 1,
     borderTopColor: "#222",
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
+    gap: 10,
   },
   overlayButton: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     backgroundColor: "rgba(255, 0, 64, 0.1)",
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: PRIMARY_COLOR,
     gap: 8,
+  },
+  overlayButtonActive: {
+    backgroundColor: PRIMARY_COLOR,
+    borderColor: PRIMARY_COLOR,
   },
   overlayButtonText: {
     color: PRIMARY_COLOR,
     fontSize: 13,
     fontWeight: "600",
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    padding: 20,
+  overlayButtonTextActive: {
+    color: "#fff",
+  },
+  permissionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1a1a1a",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 6,
+  },
+  permissionButtonText: {
+    color: "#888",
+    fontSize: 11,
+  },
+  permissionDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#00FF00",
+    marginLeft: 4,
   },
 });
