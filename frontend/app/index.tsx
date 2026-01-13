@@ -9,8 +9,6 @@ import {
   Platform,
   Alert,
   Linking,
-  AppState,
-  AppStateStatus,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from "@expo/vector-icons";
@@ -24,36 +22,18 @@ import Animated, {
   withSpring,
   interpolate,
   Easing,
-  runOnJS,
 } from "react-native-reanimated";
 
 const { width, height } = Dimensions.get("window");
 
-// Primary accent color - GREEN NEON
-const PRIMARY_COLOR = "#00FF00";
-const PRIMARY_DARK = "#00CC00";
-const PRIMARY_GLOW = "rgba(0, 255, 0, 0.4)";
-const PRIMARY_LIGHT = "rgba(0, 255, 0, 0.15)";
-
-// Try to import native module (only works in development builds)
-let FloatingBubble: any = null;
-let isNativeModuleAvailable = false;
-
-try {
-  FloatingBubble = require('../modules/floating-bubble/src').default;
-  isNativeModuleAvailable = Platform.OS === 'android';
-} catch (e) {
-  console.log('Native FloatingBubble module not available');
-}
+// Primary accent color - STRONG RED
+const PRIMARY_COLOR = "#FF0040";
+const PRIMARY_DARK = "#CC0033";
+const PRIMARY_GLOW = "rgba(255, 0, 64, 0.6)";
+const PRIMARY_LIGHT = "rgba(255, 0, 64, 0.2)";
 
 // Menu items for sidebar
 type MenuKey = "principal" | "configs" | "gelo" | "ia" | "otimizar" | "mais";
-
-interface MenuItem {
-  id: MenuKey;
-  label: string;
-  icon: React.ReactNode;
-}
 
 // Animated Glow Button Component
 const GlowButton = ({ 
@@ -72,8 +52,8 @@ const GlowButton = ({
   useEffect(() => {
     glowAnim.value = withRepeat(
       withSequence(
-        withTiming(1, { duration: 1500, easing: Easing.inOut(Easing.ease) }),
-        withTiming(0, { duration: 1500, easing: Easing.inOut(Easing.ease) })
+        withTiming(1, { duration: 1200, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0, { duration: 1200, easing: Easing.inOut(Easing.ease) })
       ),
       -1,
       true
@@ -81,12 +61,12 @@ const GlowButton = ({
   }, []);
 
   const animatedGlow = useAnimatedStyle(() => ({
-    shadowOpacity: interpolate(glowAnim.value, [0, 1], [0.3, 0.8]),
-    shadowRadius: interpolate(glowAnim.value, [0, 1], [5, 15]),
+    shadowOpacity: interpolate(glowAnim.value, [0, 1], [0.4, 1]),
+    shadowRadius: interpolate(glowAnim.value, [0, 1], [8, 20]),
   }));
 
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.8}>
+    <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
       <Animated.View style={[
         styles.glowButton,
         isActive && styles.glowButtonActive,
@@ -99,18 +79,18 @@ const GlowButton = ({
   );
 };
 
-// Custom Toggle Switch Component
+// Custom Toggle Switch with Glow
 const CustomToggle = ({ value, onToggle }: { value: boolean; onToggle: () => void }) => {
-  const translateX = useSharedValue(value ? 22 : 0);
+  const translateX = useSharedValue(value ? 24 : 0);
   const glowAnim = useSharedValue(0);
 
   useEffect(() => {
-    translateX.value = withSpring(value ? 22 : 0, { damping: 15 });
+    translateX.value = withSpring(value ? 24 : 0, { damping: 15 });
     if (value) {
       glowAnim.value = withRepeat(
         withSequence(
-          withTiming(1, { duration: 1000 }),
-          withTiming(0.5, { duration: 1000 })
+          withTiming(1, { duration: 800 }),
+          withTiming(0.3, { duration: 800 })
         ),
         -1,
         true
@@ -125,8 +105,8 @@ const CustomToggle = ({ value, onToggle }: { value: boolean; onToggle: () => voi
   }));
 
   const trackGlow = useAnimatedStyle(() => ({
-    shadowOpacity: value ? interpolate(glowAnim.value, [0, 1], [0.5, 1]) : 0,
-    shadowRadius: value ? interpolate(glowAnim.value, [0, 1], [5, 15]) : 0,
+    shadowOpacity: value ? interpolate(glowAnim.value, [0, 1], [0.6, 1]) : 0,
+    shadowRadius: value ? interpolate(glowAnim.value, [0, 1], [10, 25]) : 0,
   }));
 
   return (
@@ -136,26 +116,74 @@ const CustomToggle = ({ value, onToggle }: { value: boolean; onToggle: () => voi
         value && styles.toggleTrackActive,
         trackGlow
       ]}>
-        <Animated.View style={[styles.toggleThumb, thumbStyle]} />
+        <Animated.View style={[
+          styles.toggleThumb, 
+          thumbStyle,
+          value && styles.toggleThumbActive
+        ]} />
       </Animated.View>
     </TouchableOpacity>
   );
 };
 
-// Code Injection Animation Component
-const CodeInjection = ({ visible, onComplete }: { visible: boolean; onComplete: () => void }) => {
+// Checkbox with Glow
+const GlowCheckbox = ({ checked, onToggle }: { checked: boolean; onToggle: () => void }) => {
+  const glowAnim = useSharedValue(0);
+
+  useEffect(() => {
+    if (checked) {
+      glowAnim.value = withRepeat(
+        withSequence(
+          withTiming(1, { duration: 1000 }),
+          withTiming(0.4, { duration: 1000 })
+        ),
+        -1,
+        true
+      );
+    } else {
+      glowAnim.value = 0;
+    }
+  }, [checked]);
+
+  const animatedGlow = useAnimatedStyle(() => ({
+    shadowOpacity: checked ? interpolate(glowAnim.value, [0, 1], [0.5, 1]) : 0,
+    shadowRadius: checked ? interpolate(glowAnim.value, [0, 1], [8, 18]) : 0,
+  }));
+
+  return (
+    <TouchableOpacity onPress={onToggle} activeOpacity={0.7}>
+      <Animated.View style={[
+        styles.checkbox,
+        checked && styles.checkboxActive,
+        animatedGlow
+      ]}>
+        {checked && <Ionicons name="checkmark" size={18} color="#fff" />}
+      </Animated.View>
+    </TouchableOpacity>
+  );
+};
+
+// Code Animation Component (for IA and RAM)
+const CodeAnimation = ({ 
+  visible, 
+  onComplete,
+  type 
+}: { 
+  visible: boolean; 
+  onComplete: () => void;
+  type: 'ia' | 'ram';
+}) => {
   const [lines, setLines] = useState<string[]>([]);
   const scrollRef = useRef<ScrollView>(null);
   
-  const codeLines = [
-    "const CheatMenu = (() => {",
+  const iaCodeLines = [
+    "const AimAssist = (() => {",
     "  const weapons = ",
-    '["Mp40","M1014","UMP","Desert","XM4","Skar","MP5"];',
-    "  const state = {",
+    '  ["Mp40","M1014","UMP","Desert","XM8","Scar"];',
+    "  const config = {",
     "    aimlock: true,",
     "    headshot: true,",
     "    AIMTRICK: true,",
-    "    AimDispersal: false,",
     "    sensitivity: 85,",
     "  };",
     "",
@@ -165,7 +193,6 @@ const CodeInjection = ({ visible, onComplete }: { visible: boolean; onComplete: 
     "    adjustAim(target.position);",
     "    return true;",
     "  }",
-    "  return false;",
     "}",
     "",
     "function calculateHeadshot(enemy) {",
@@ -179,12 +206,56 @@ const CodeInjection = ({ visible, onComplete }: { visible: boolean; onComplete: 
     "initAimAssist();",
     "loadWeaponConfigs(weapons);",
     "activateNoRecoil();",
-    "enableAutoAim();",
     "",
     "console.log('IA Injetada com sucesso!');",
     "return { status: 'ACTIVE' };",
     "})();",
   ];
+
+  const ramCodeLines = [
+    "const RAMCleaner = (() => {",
+    "  const memoryBlocks = [];",
+    "  let freedMemory = 0;",
+    "",
+    "function scanMemory() {",
+    "  console.log('Escaneando memória...');",
+    "  const blocks = getMemoryBlocks();",
+    "  return blocks.filter(b => !b.inUse);",
+    "}",
+    "",
+    "function clearCache() {",
+    "  const cache = getCacheData();",
+    "  cache.forEach(item => {",
+    "    if (item.age > 30000) {",
+    "      item.dispose();",
+    "      freedMemory += item.size;",
+    "    }",
+    "  });",
+    "}",
+    "",
+    "function optimizeRAM() {",
+    "  // Liberando processos em background",
+    "  killBackgroundProcesses();",
+    "  ",
+    "  // Limpando cache do sistema",
+    "  clearSystemCache();",
+    "  ",
+    "  // Compactando memória",
+    "  compactMemory();",
+    "}",
+    "",
+    "// Executando limpeza...",
+    "const unused = scanMemory();",
+    "clearCache();",
+    "optimizeRAM();",
+    "",
+    "console.log('RAM otimizada!');",
+    "console.log('Memória liberada: 847MB');",
+    "return { freed: '847MB' };",
+    "})();",
+  ];
+
+  const codeLines = type === 'ia' ? iaCodeLines : ramCodeLines;
 
   useEffect(() => {
     if (visible) {
@@ -199,7 +270,7 @@ const CodeInjection = ({ visible, onComplete }: { visible: boolean; onComplete: 
           clearInterval(interval);
           setTimeout(onComplete, 1500);
         }
-      }, 100);
+      }, 80);
       return () => clearInterval(interval);
     }
   }, [visible]);
@@ -210,9 +281,11 @@ const CodeInjection = ({ visible, onComplete }: { visible: boolean; onComplete: 
     <View style={styles.codeContainer}>
       <View style={styles.codeHeader}>
         <View style={styles.codeHeaderIcon}>
-          <Ionicons name="checkmark" size={20} color="#000" />
+          <Ionicons name="checkmark" size={18} color="#000" />
         </View>
-        <Text style={styles.codeHeaderText}>Códigos injetados!</Text>
+        <Text style={styles.codeHeaderText}>
+          {type === 'ia' ? 'Códigos injetados!' : 'Limpando RAM...'}
+        </Text>
       </View>
       <ScrollView 
         ref={scrollRef}
@@ -223,8 +296,12 @@ const CodeInjection = ({ visible, onComplete }: { visible: boolean; onComplete: 
           <Text key={i} style={styles.codeLine}>{line}</Text>
         ))}
       </ScrollView>
-      <View style={styles.gunIcon}>
-        <MaterialCommunityIcons name="pistol" size={120} color={PRIMARY_COLOR} />
+      <View style={styles.codeIcon}>
+        {type === 'ia' ? (
+          <MaterialCommunityIcons name="pistol" size={100} color={PRIMARY_COLOR} />
+        ) : (
+          <MaterialCommunityIcons name="memory" size={100} color={PRIMARY_COLOR} />
+        )}
       </View>
     </View>
   );
@@ -280,10 +357,12 @@ export default function PainelAimlessFF() {
   const [isPanelVisible, setIsPanelVisible] = useState(false);
   const [activeMenu, setActiveMenu] = useState<MenuKey>("principal");
   const [showCodeInjection, setShowCodeInjection] = useState(false);
+  const [showRamCleaning, setShowRamCleaning] = useState(false);
   const [showRefreshRate, setShowRefreshRate] = useState(false);
   const [selectedRefreshRate, setSelectedRefreshRate] = useState(60);
   const [selectedGelo, setSelectedGelo] = useState<'normal' | 'invertido' | 'reduzido'>('normal');
   const [iaInjected, setIaInjected] = useState(false);
+  const [ramCleaned, setRamCleaned] = useState(false);
   
   // Feature states
   const [features, setFeatures] = useState({
@@ -292,6 +371,9 @@ export default function PainelAimlessFF() {
     norecoil: false,
     headshot: false,
     antiban: true,
+    sensitivity: true,
+    fov: false,
+    smooth: true,
   });
 
   const pulseScale = useSharedValue(1);
@@ -299,8 +381,8 @@ export default function PainelAimlessFF() {
   useEffect(() => {
     pulseScale.value = withRepeat(
       withSequence(
-        withTiming(1.08, { duration: 1200 }),
-        withTiming(1, { duration: 1200 })
+        withTiming(1.1, { duration: 1000 }),
+        withTiming(1, { duration: 1000 })
       ),
       -1,
       true
@@ -311,37 +393,13 @@ export default function PainelAimlessFF() {
     transform: [{ scale: pulseScale.value }],
   }));
 
-  const menuItems: MenuItem[] = [
-    {
-      id: "principal",
-      label: "Principal",
-      icon: <FontAwesome5 name="skull" size={16} color={activeMenu === "principal" ? "#000" : "#888"} />,
-    },
-    {
-      id: "configs",
-      label: "Configs",
-      icon: <Ionicons name="settings" size={18} color={activeMenu === "configs" ? "#000" : "#888"} />,
-    },
-    {
-      id: "gelo",
-      label: "Gelo",
-      icon: <MaterialCommunityIcons name="spray" size={18} color={activeMenu === "gelo" ? "#000" : "#888"} />,
-    },
-    {
-      id: "ia",
-      label: "I.A",
-      icon: <MaterialCommunityIcons name="diamond-stone" size={18} color={activeMenu === "ia" ? "#000" : "#888"} />,
-    },
-    {
-      id: "otimizar",
-      label: "Otimizar",
-      icon: <Ionicons name="flash" size={18} color={activeMenu === "otimizar" ? "#000" : "#888"} />,
-    },
-    {
-      id: "mais",
-      label: "Mais",
-      icon: <Ionicons name="menu" size={18} color={activeMenu === "mais" ? "#000" : "#888"} />,
-    },
+  const menuItems = [
+    { id: "principal" as MenuKey, label: "Principal", iconName: "skull" as const },
+    { id: "configs" as MenuKey, label: "Configs", iconName: "settings" as const },
+    { id: "gelo" as MenuKey, label: "Gelo", iconName: "snow" as const },
+    { id: "ia" as MenuKey, label: "I.A", iconName: "hardware-chip" as const },
+    { id: "otimizar" as MenuKey, label: "Otimizar", iconName: "flash" as const },
+    { id: "mais" as MenuKey, label: "Mais", iconName: "menu" as const },
   ];
 
   const toggleFeature = (key: keyof typeof features) => {
@@ -355,11 +413,82 @@ export default function PainelAimlessFF() {
   const handleCodeComplete = () => {
     setShowCodeInjection(false);
     setIaInjected(true);
-    Alert.alert("Sucesso!", "IA injetada com sucesso! Suas configurações foram aplicadas.");
+    Alert.alert("Sucesso!", "IA injetada com sucesso!");
+  };
+
+  const handleCleanRAM = () => {
+    setShowRamCleaning(true);
+  };
+
+  const handleRamComplete = () => {
+    setShowRamCleaning(false);
+    setRamCleaned(true);
+    Alert.alert("Sucesso!", "RAM otimizada! 847MB liberados.");
   };
 
   const openYouTube = () => {
     Linking.openURL('https://www.youtube.com/@AIMLESSREGEDIT');
+  };
+
+  const renderMenuIcon = (iconName: string, isActive: boolean) => {
+    const color = isActive ? "#000" : "#888";
+    switch(iconName) {
+      case "skull":
+        return <FontAwesome5 name="skull" size={16} color={color} />;
+      case "settings":
+        return <Ionicons name="settings" size={18} color={color} />;
+      case "snow":
+        return <Ionicons name="snow" size={18} color={color} />;
+      case "hardware-chip":
+        return <Ionicons name="hardware-chip" size={18} color={color} />;
+      case "flash":
+        return <Ionicons name="flash" size={18} color={color} />;
+      case "menu":
+        return <Ionicons name="menu" size={18} color={color} />;
+      default:
+        return null;
+    }
+  };
+
+  const FeatureRow = ({ 
+    label, 
+    featureKey,
+    hasCheckbox,
+    hasToggle 
+  }: { 
+    label: string; 
+    featureKey: keyof typeof features;
+    hasCheckbox?: boolean;
+    hasToggle?: boolean;
+  }) => {
+    const isActive = features[featureKey];
+    
+    return (
+      <View style={styles.featureRow}>
+        <View style={styles.featureLeft}>
+          {hasCheckbox && (
+            <GlowCheckbox 
+              checked={isActive} 
+              onToggle={() => toggleFeature(featureKey)}
+            />
+          )}
+          <Text style={styles.featureLabel}>{label}</Text>
+        </View>
+        <View style={styles.featureRight}>
+          <View style={[styles.statusBadge, isActive ? styles.statusActive : styles.statusInactive]}>
+            <Text style={[styles.statusText, isActive ? styles.statusTextActive : styles.statusTextInactive]}>
+              {isActive ? "ATIVO" : "DESATIVADO"}
+            </Text>
+          </View>
+          {hasToggle && (
+            <CustomToggle 
+              value={isActive} 
+              onToggle={() => toggleFeature(featureKey)}
+            />
+          )}
+        </View>
+      </View>
+    );
   };
 
   const renderContent = () => {
@@ -367,36 +496,21 @@ export default function PainelAimlessFF() {
       case "principal":
         return (
           <View style={styles.contentArea}>
-            <FeatureRow 
-              label="Aimbot Rage" 
-              active={features.aimbot} 
-              onToggle={() => toggleFeature('aimbot')}
-              hasCheckbox
-            />
-            <FeatureRow 
-              label="Aimlock" 
-              active={features.aimlock} 
-              onToggle={() => toggleFeature('aimlock')}
-              hasCheckbox
-            />
-            <FeatureRow 
-              label="No Recoil" 
-              active={features.norecoil} 
-              onToggle={() => toggleFeature('norecoil')}
-              hasCheckbox
-            />
-            <FeatureRow 
-              label="Headshot" 
-              active={features.headshot} 
-              onToggle={() => toggleFeature('headshot')}
-              hasToggle
-            />
-            <FeatureRow 
-              label="Anti-Ban" 
-              active={features.antiban} 
-              onToggle={() => toggleFeature('antiban')}
-              hasToggle
-            />
+            <FeatureRow label="Aimbot Rage" featureKey="aimbot" hasCheckbox />
+            <FeatureRow label="Aimlock" featureKey="aimlock" hasCheckbox />
+            <FeatureRow label="No Recoil" featureKey="norecoil" hasCheckbox />
+            <FeatureRow label="Headshot" featureKey="headshot" hasToggle />
+            <FeatureRow label="Anti-Ban" featureKey="antiban" hasToggle />
+          </View>
+        );
+
+      case "configs":
+        return (
+          <View style={styles.contentArea}>
+            <Text style={styles.sectionTitle}>CONFIGURAÇÕES</Text>
+            <FeatureRow label="Sensibilidade Auto" featureKey="sensitivity" hasToggle />
+            <FeatureRow label="Campo de Visão" featureKey="fov" hasToggle />
+            <FeatureRow label="Smooth Aim" featureKey="smooth" hasToggle />
           </View>
         );
 
@@ -405,18 +519,21 @@ export default function PainelAimlessFF() {
           <View style={styles.contentArea}>
             <View style={styles.geloHeader}>
               <View style={styles.geloIconContainer}>
-                <MaterialCommunityIcons name="spray" size={24} color={PRIMARY_COLOR} />
+                <Ionicons name="snow" size={24} color="#fff" />
               </View>
               <Text style={styles.geloTitle}>DEFINA O TIPO DE GELO</Text>
             </View>
             
             <View style={styles.geloImageContainer}>
-              <MaterialCommunityIcons 
-                name="account-cowboy-hat" 
-                size={100} 
-                color={PRIMARY_COLOR} 
-                style={{ opacity: 0.6 }}
-              />
+              {/* Ice wall / frozen wall icon */}
+              <View style={styles.iceWallContainer}>
+                <MaterialCommunityIcons name="wall" size={80} color={PRIMARY_COLOR} />
+                <View style={styles.iceOverlay}>
+                  <Ionicons name="snow" size={30} color="#fff" style={styles.snowIcon1} />
+                  <Ionicons name="snow" size={20} color="#fff" style={styles.snowIcon2} />
+                  <Ionicons name="snow" size={25} color="#fff" style={styles.snowIcon3} />
+                </View>
+              </View>
             </View>
             
             <View style={styles.geloOptions}>
@@ -425,6 +542,7 @@ export default function PainelAimlessFF() {
                 isActive={selectedGelo === 'normal'}
                 style={styles.geloButton}
               >
+                <Ionicons name="snow" size={16} color={selectedGelo === 'normal' ? "#000" : "#fff"} />
                 <Text style={[styles.geloButtonText, selectedGelo === 'normal' && styles.geloButtonTextActive]}>
                   NORMAL
                 </Text>
@@ -435,10 +553,10 @@ export default function PainelAimlessFF() {
                 isActive={selectedGelo === 'invertido'}
                 style={styles.geloButton}
               >
+                <MaterialCommunityIcons name="rotate-3d-variant" size={16} color={selectedGelo === 'invertido' ? "#000" : "#fff"} />
                 <Text style={[styles.geloButtonText, selectedGelo === 'invertido' && styles.geloButtonTextActive]}>
                   INVERTIDO
                 </Text>
-                <MaterialCommunityIcons name="moon-waning-crescent" size={16} color={selectedGelo === 'invertido' ? "#000" : "#fff"} />
               </GlowButton>
               
               <GlowButton 
@@ -446,10 +564,10 @@ export default function PainelAimlessFF() {
                 isActive={selectedGelo === 'reduzido'}
                 style={styles.geloButton}
               >
+                <MaterialCommunityIcons name="arrow-collapse" size={16} color={selectedGelo === 'reduzido' ? "#000" : "#fff"} />
                 <Text style={[styles.geloButtonText, selectedGelo === 'reduzido' && styles.geloButtonTextActive]}>
                   REDUZIDO
                 </Text>
-                <MaterialCommunityIcons name="arrow-collapse" size={16} color={selectedGelo === 'reduzido' ? "#000" : "#fff"} />
               </GlowButton>
             </View>
           </View>
@@ -459,15 +577,15 @@ export default function PainelAimlessFF() {
         return (
           <View style={styles.contentArea}>
             {showCodeInjection ? (
-              <CodeInjection visible={showCodeInjection} onComplete={handleCodeComplete} />
+              <CodeAnimation visible={showCodeInjection} onComplete={handleCodeComplete} type="ia" />
             ) : (
               <View style={styles.iaContainer}>
-                <MaterialCommunityIcons name="robot" size={80} color={PRIMARY_COLOR} style={{ opacity: 0.3 }} />
+                <MaterialCommunityIcons name="robot" size={70} color={PRIMARY_COLOR} style={{ opacity: 0.4 }} />
                 <Text style={styles.iaTitle}>INTELIGÊNCIA ARTIFICIAL</Text>
                 <Text style={styles.iaSubtitle}>
                   {iaInjected 
-                    ? "IA ativa! Seus módulos estão funcionando." 
-                    : "Injete a IA para melhorar sua mira automaticamente"}
+                    ? "IA ativa! Módulos funcionando." 
+                    : "Injete a IA para melhorar sua mira"}
                 </Text>
                 
                 <GlowButton 
@@ -477,7 +595,7 @@ export default function PainelAimlessFF() {
                 >
                   <MaterialCommunityIcons 
                     name={iaInjected ? "check-circle" : "needle"} 
-                    size={24} 
+                    size={22} 
                     color={iaInjected ? "#000" : "#fff"} 
                   />
                   <Text style={[styles.injectButtonText, iaInjected && { color: "#000" }]}>
@@ -492,7 +610,9 @@ export default function PainelAimlessFF() {
       case "otimizar":
         return (
           <View style={styles.contentArea}>
-            {showRefreshRate ? (
+            {showRamCleaning ? (
+              <CodeAnimation visible={showRamCleaning} onComplete={handleRamComplete} type="ram" />
+            ) : showRefreshRate ? (
               <RefreshRateSelector 
                 visible={showRefreshRate}
                 currentRate={selectedRefreshRate}
@@ -501,8 +621,8 @@ export default function PainelAimlessFF() {
               />
             ) : (
               <View style={styles.optimizeContainer}>
-                <MaterialCommunityIcons name="speedometer" size={60} color={PRIMARY_COLOR} style={{ opacity: 0.3 }} />
-                <Text style={styles.optimizeTitle}>OTIMIZAÇÃO DE TELA</Text>
+                <MaterialCommunityIcons name="speedometer" size={50} color={PRIMARY_COLOR} style={{ opacity: 0.4 }} />
+                <Text style={styles.optimizeTitle}>OTIMIZAÇÃO</Text>
                 
                 <View style={styles.currentRate}>
                   <Text style={styles.currentRateLabel}>Taxa atual:</Text>
@@ -513,16 +633,23 @@ export default function PainelAimlessFF() {
                   onPress={() => setShowRefreshRate(true)}
                   style={styles.optimizeButton}
                 >
-                  <Ionicons name="speedometer" size={20} color="#fff" />
+                  <Ionicons name="speedometer" size={18} color="#fff" />
                   <Text style={styles.optimizeButtonText}>ALTERAR TAXA DE Hz</Text>
                 </GlowButton>
                 
                 <GlowButton 
-                  onPress={() => Alert.alert("Otimizado!", "RAM limpa com sucesso!")}
-                  style={[styles.optimizeButton, { marginTop: 12 }]}
+                  onPress={handleCleanRAM}
+                  isActive={ramCleaned}
+                  style={styles.optimizeButton}
                 >
-                  <MaterialCommunityIcons name="memory" size={20} color="#fff" />
-                  <Text style={styles.optimizeButtonText}>LIMPAR RAM</Text>
+                  <MaterialCommunityIcons 
+                    name="memory" 
+                    size={18} 
+                    color={ramCleaned ? "#000" : "#fff"} 
+                  />
+                  <Text style={[styles.optimizeButtonText, ramCleaned && { color: "#000" }]}>
+                    {ramCleaned ? "RAM LIMPA" : "LIMPAR RAM"}
+                  </Text>
                 </GlowButton>
               </View>
             )}
@@ -534,32 +661,32 @@ export default function PainelAimlessFF() {
           <View style={styles.contentArea}>
             <View style={styles.maisContainer}>
               <View style={styles.maisHeader}>
-                <MaterialCommunityIcons name="information" size={40} color={PRIMARY_COLOR} />
+                <MaterialCommunityIcons name="information" size={36} color={PRIMARY_COLOR} />
                 <Text style={styles.maisTitle}>INFORMAÇÕES</Text>
               </View>
               
               <View style={styles.maisInfo}>
                 <View style={styles.maisRow}>
-                  <Ionicons name="calendar" size={20} color={PRIMARY_COLOR} />
+                  <Ionicons name="calendar" size={18} color={PRIMARY_COLOR} />
                   <Text style={styles.maisLabel}>Última atualização:</Text>
                   <Text style={styles.maisValue}>13 / 01 / 2026</Text>
                 </View>
                 
                 <View style={styles.maisRow}>
-                  <Ionicons name="code-slash" size={20} color={PRIMARY_COLOR} />
+                  <Ionicons name="code-slash" size={18} color={PRIMARY_COLOR} />
                   <Text style={styles.maisLabel}>Versão:</Text>
                   <Text style={styles.maisValue}>5.0</Text>
                 </View>
                 
                 <View style={styles.maisRow}>
-                  <Ionicons name="person" size={20} color={PRIMARY_COLOR} />
+                  <Ionicons name="person" size={18} color={PRIMARY_COLOR} />
                   <Text style={styles.maisLabel}>Criador:</Text>
                   <Text style={styles.maisValue}>AimlessFF</Text>
                 </View>
               </View>
               
               <GlowButton onPress={openYouTube} style={styles.youtubeButton}>
-                <Ionicons name="logo-youtube" size={24} color="#FF0000" />
+                <Ionicons name="logo-youtube" size={22} color="#FF0000" />
                 <Text style={styles.youtubeButtonText}>CANAL DO CRIADOR</Text>
               </GlowButton>
               
@@ -568,70 +695,10 @@ export default function PainelAimlessFF() {
           </View>
         );
 
-      case "configs":
-        return (
-          <View style={styles.contentArea}>
-            <Text style={styles.sectionTitle}>CONFIGURAÇÕES</Text>
-            <FeatureRow 
-              label="Sensibilidade Auto" 
-              active={true} 
-              onToggle={() => {}}
-              hasToggle
-            />
-            <FeatureRow 
-              label="Campo de Visão" 
-              active={false} 
-              onToggle={() => {}}
-              hasToggle
-            />
-            <FeatureRow 
-              label="Smooth Aim" 
-              active={true} 
-              onToggle={() => {}}
-              hasToggle
-            />
-          </View>
-        );
-
       default:
         return null;
     }
   };
-
-  const FeatureRow = ({ 
-    label, 
-    active, 
-    onToggle, 
-    hasCheckbox,
-    hasToggle 
-  }: { 
-    label: string; 
-    active: boolean; 
-    onToggle: () => void;
-    hasCheckbox?: boolean;
-    hasToggle?: boolean;
-  }) => (
-    <View style={styles.featureRow}>
-      <View style={styles.featureLeft}>
-        {hasCheckbox && (
-          <TouchableOpacity onPress={onToggle}>
-            <View style={[styles.checkbox, active && styles.checkboxActive]}>
-              {active && <Ionicons name="checkmark" size={16} color="#000" />}
-            </View>
-          </TouchableOpacity>
-        )}
-        <Text style={styles.featureLabel}>{label}</Text>
-      </View>
-      <View style={styles.featureRight}>
-        <View style={[styles.statusBadge, active ? styles.statusActive : styles.statusInactive]}>
-          <Text style={[styles.statusText, active ? styles.statusTextActive : styles.statusTextInactive]}>
-            {active ? "ATIVO" : "DESATIVADO"}
-          </Text>
-        </View>
-        {hasToggle && <CustomToggle value={active} onToggle={onToggle} />}
-      </View>
-    </View>
-  );
 
   const renderPanel = () => (
     <View style={styles.panelLandscape}>
@@ -640,10 +707,10 @@ export default function PainelAimlessFF() {
         <Text style={styles.headerTitle}>PAINEL AimlessFF 5.0</Text>
         <View style={styles.headerButtons}>
           <TouchableOpacity style={styles.headerButton}>
-            <MaterialCommunityIcons name="arrow-collapse" size={20} color="#000" />
+            <MaterialCommunityIcons name="arrow-collapse" size={18} color="#fff" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.headerButton} onPress={() => setIsPanelVisible(false)}>
-            <Ionicons name="close" size={22} color="#000" />
+            <Ionicons name="close" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
       </View>
@@ -659,7 +726,7 @@ export default function PainelAimlessFF() {
               onPress={() => setActiveMenu(item.id)}
             >
               <View style={[styles.menuIconContainer, activeMenu === item.id && styles.menuIconContainerActive]}>
-                {item.icon}
+                {renderMenuIcon(item.iconName, activeMenu === item.id)}
               </View>
               <Text style={[styles.menuLabel, activeMenu === item.id && styles.menuLabelActive]}>
                 {item.label}
@@ -698,7 +765,7 @@ export default function PainelAimlessFF() {
               activeOpacity={0.8}
             >
               <View style={styles.floatingButtonInner}>
-                <MaterialCommunityIcons name="crosshairs-gps" size={32} color="#000" />
+                <MaterialCommunityIcons name="crosshairs-gps" size={32} color="#fff" />
               </View>
             </TouchableOpacity>
           </Animated.View>
@@ -754,9 +821,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     shadowColor: PRIMARY_COLOR,
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 20,
-    elevation: 15,
+    shadowOpacity: 1,
+    shadowRadius: 25,
+    elevation: 20,
   },
   floatingButtonInner: {
     width: 70,
@@ -766,7 +833,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 3,
-    borderColor: "rgba(0,0,0,0.2)",
+    borderColor: "rgba(255,255,255,0.3)",
   },
   floatingHint: {
     position: "absolute",
@@ -788,9 +855,9 @@ const styles = StyleSheet.create({
     borderColor: PRIMARY_COLOR,
     shadowColor: PRIMARY_COLOR,
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    elevation: 10,
+    shadowOpacity: 0.8,
+    shadowRadius: 25,
+    elevation: 15,
   },
   header: {
     flexDirection: "row",
@@ -803,7 +870,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 16,
     fontWeight: "bold",
-    color: "#000",
+    color: "#fff",
     letterSpacing: 1,
   },
   headerButtons: {
@@ -818,32 +885,37 @@ const styles = StyleSheet.create({
     flexDirection: "row",
   },
   sidebar: {
-    width: 90,
-    paddingVertical: 12,
-    paddingHorizontal: 6,
+    width: 85,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
     backgroundColor: "#0d0d0d",
   },
   menuItem: {
     flexDirection: "column",
     alignItems: "center",
-    paddingVertical: 8,
+    paddingVertical: 6,
     borderRadius: 8,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   menuItemActive: {
-    backgroundColor: "rgba(0, 255, 0, 0.1)",
+    backgroundColor: "rgba(255, 0, 64, 0.15)",
   },
   menuIconContainer: {
-    width: 38,
-    height: 38,
+    width: 36,
+    height: 36,
     borderRadius: 10,
     backgroundColor: "#2a2a2a",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 4,
+    marginBottom: 3,
   },
   menuIconContainerActive: {
     backgroundColor: PRIMARY_COLOR,
+    shadowColor: PRIMARY_COLOR,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    elevation: 8,
   },
   menuLabel: {
     fontSize: 9,
@@ -857,12 +929,12 @@ const styles = StyleSheet.create({
   divider: {
     width: 1,
     backgroundColor: "#333",
-    marginVertical: 12,
+    marginVertical: 10,
   },
   mainContent: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
   contentArea: {
     flex: 1,
@@ -871,13 +943,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "bold",
     color: PRIMARY_COLOR,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   featureRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: "#1a1a1a",
   },
@@ -889,17 +961,19 @@ const styles = StyleSheet.create({
   featureRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
   },
   checkbox: {
-    width: 24,
-    height: 24,
+    width: 26,
+    height: 26,
     borderWidth: 2,
     borderColor: PRIMARY_COLOR,
-    borderRadius: 4,
+    borderRadius: 6,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
+    shadowColor: PRIMARY_COLOR,
+    shadowOffset: { width: 0, height: 0 },
   },
   checkboxActive: {
     backgroundColor: PRIMARY_COLOR,
@@ -910,72 +984,77 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 6,
-    minWidth: 85,
+    minWidth: 80,
     alignItems: "center",
   },
   statusActive: {
-    backgroundColor: "rgba(0, 255, 0, 0.2)",
+    backgroundColor: "rgba(255, 0, 64, 0.25)",
   },
   statusInactive: {
-    backgroundColor: "rgba(255, 150, 150, 0.2)",
+    backgroundColor: "rgba(100, 100, 100, 0.3)",
   },
   statusText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "bold",
+    letterSpacing: 0.5,
   },
   statusTextActive: {
     color: PRIMARY_COLOR,
   },
   statusTextInactive: {
-    color: "#ff9090",
+    color: "#888",
   },
   // Custom Toggle
   toggleTrack: {
-    width: 50,
+    width: 52,
     height: 28,
     borderRadius: 14,
     backgroundColor: "#333",
     justifyContent: "center",
-    padding: 3,
+    padding: 2,
     shadowColor: PRIMARY_COLOR,
+    shadowOffset: { width: 0, height: 0 },
   },
   toggleTrackActive: {
     backgroundColor: PRIMARY_COLOR,
   },
   toggleThumb: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: "#000",
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#666",
+  },
+  toggleThumbActive: {
+    backgroundColor: "#fff",
   },
   // Glow Button
   glowButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#2a2a2a",
+    backgroundColor: "#1a1a1a",
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 25,
-    borderWidth: 1,
-    borderColor: "#444",
+    borderWidth: 2,
+    borderColor: PRIMARY_COLOR,
     gap: 8,
     shadowColor: PRIMARY_COLOR,
     shadowOffset: { width: 0, height: 0 },
+    marginVertical: 4,
   },
   glowButtonActive: {
     backgroundColor: PRIMARY_COLOR,
-    borderColor: PRIMARY_COLOR,
   },
   // Gelo Section
   geloHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 20,
-    gap: 12,
+    marginBottom: 16,
+    gap: 10,
   },
   geloIconContainer: {
     width: 40,
@@ -984,29 +1063,63 @@ const styles = StyleSheet.create({
     backgroundColor: PRIMARY_COLOR,
     justifyContent: "center",
     alignItems: "center",
+    shadowColor: PRIMARY_COLOR,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 12,
+    elevation: 10,
   },
   geloTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "bold",
     color: "#fff",
   },
   geloImageContainer: {
     alignItems: "center",
-    marginVertical: 20,
+    marginVertical: 16,
+  },
+  iceWallContainer: {
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iceOverlay: {
+    position: "absolute",
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  snowIcon1: {
+    position: "absolute",
+    top: 5,
+    left: 10,
+  },
+  snowIcon2: {
+    position: "absolute",
+    bottom: 10,
+    right: 5,
+  },
+  snowIcon3: {
+    position: "absolute",
+    top: 20,
+    right: 15,
   },
   geloOptions: {
     flexDirection: "row",
     justifyContent: "center",
-    gap: 10,
+    gap: 8,
     flexWrap: "wrap",
   },
   geloButton: {
-    minWidth: 100,
+    minWidth: 95,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   geloButtonText: {
     color: "#fff",
     fontWeight: "bold",
-    fontSize: 12,
+    fontSize: 11,
   },
   geloButtonTextActive: {
     color: "#000",
@@ -1014,52 +1127,53 @@ const styles = StyleSheet.create({
   // IA Section
   iaContainer: {
     alignItems: "center",
-    paddingVertical: 20,
+    paddingVertical: 16,
   },
   iaTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "bold",
     color: PRIMARY_COLOR,
-    marginTop: 16,
+    marginTop: 12,
   },
   iaSubtitle: {
     fontSize: 12,
     color: "#888",
-    marginTop: 8,
+    marginTop: 6,
     textAlign: "center",
   },
   injectButton: {
-    marginTop: 24,
-    paddingHorizontal: 32,
-    paddingVertical: 16,
+    marginTop: 20,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
   },
   injectButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "bold",
     color: "#fff",
   },
-  // Code Injection
+  // Code Animation
   codeContainer: {
     flex: 1,
     backgroundColor: "#000",
     borderRadius: 8,
-    padding: 16,
+    padding: 12,
+    minHeight: 300,
   },
   codeHeader: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: PRIMARY_COLOR,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 25,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
     alignSelf: "flex-start",
-    marginBottom: 16,
+    marginBottom: 12,
     gap: 8,
   },
   codeHeaderIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: "#000",
     justifyContent: "center",
     alignItems: "center",
@@ -1067,7 +1181,7 @@ const styles = StyleSheet.create({
   codeHeaderText: {
     color: "#000",
     fontWeight: "bold",
-    fontSize: 14,
+    fontSize: 13,
   },
   codeScroll: {
     flex: 1,
@@ -1075,27 +1189,27 @@ const styles = StyleSheet.create({
   codeLine: {
     color: PRIMARY_COLOR,
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    fontSize: 11,
-    lineHeight: 18,
+    fontSize: 10,
+    lineHeight: 16,
   },
-  gunIcon: {
+  codeIcon: {
     position: "absolute",
-    right: 10,
-    bottom: 10,
-    opacity: 0.8,
+    right: 8,
+    bottom: 8,
+    opacity: 0.7,
   },
   // Refresh Rate
   rateSelector: {
     alignItems: "center",
-    paddingVertical: 20,
+    paddingVertical: 16,
   },
   rateSelectorTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "bold",
     color: PRIMARY_COLOR,
   },
   rateSelectorSubtitle: {
-    fontSize: 12,
+    fontSize: 11,
     color: "#888",
     marginTop: 4,
   },
@@ -1103,116 +1217,125 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "center",
-    gap: 12,
-    marginTop: 24,
+    gap: 10,
+    marginTop: 20,
   },
   rateButton: {
-    minWidth: 80,
+    minWidth: 75,
+    paddingVertical: 10,
   },
   rateButtonText: {
     color: "#fff",
     fontWeight: "bold",
-    fontSize: 14,
+    fontSize: 13,
   },
   rateButtonTextActive: {
     color: "#000",
   },
   rateCloseButton: {
     backgroundColor: PRIMARY_COLOR,
-    paddingHorizontal: 40,
+    paddingHorizontal: 36,
     paddingVertical: 12,
     borderRadius: 25,
-    marginTop: 24,
+    marginTop: 20,
+    shadowColor: PRIMARY_COLOR,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 15,
+    elevation: 10,
   },
   rateCloseText: {
-    color: "#000",
+    color: "#fff",
     fontWeight: "bold",
   },
   // Optimize
   optimizeContainer: {
     alignItems: "center",
-    paddingVertical: 20,
+    paddingVertical: 16,
   },
   optimizeTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "bold",
     color: PRIMARY_COLOR,
-    marginTop: 12,
+    marginTop: 10,
   },
   currentRate: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 16,
+    marginTop: 12,
     gap: 8,
   },
   currentRateLabel: {
     color: "#888",
-    fontSize: 14,
+    fontSize: 13,
   },
   currentRateValue: {
     color: PRIMARY_COLOR,
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "bold",
   },
   optimizeButton: {
-    marginTop: 20,
-    paddingHorizontal: 24,
+    marginTop: 14,
+    paddingHorizontal: 20,
+    minWidth: 180,
   },
   optimizeButtonText: {
     color: "#fff",
     fontWeight: "bold",
+    fontSize: 13,
   },
   // Mais Section
   maisContainer: {
     alignItems: "center",
-    paddingVertical: 10,
+    paddingVertical: 8,
   },
   maisHeader: {
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: 14,
   },
   maisTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "bold",
     color: PRIMARY_COLOR,
-    marginTop: 8,
+    marginTop: 6,
   },
   maisInfo: {
     width: "100%",
     backgroundColor: "#1a1a1a",
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
+    padding: 14,
+    marginBottom: 16,
   },
   maisRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 8,
-    gap: 10,
+    paddingVertical: 6,
+    gap: 8,
   },
   maisLabel: {
     color: "#888",
-    fontSize: 13,
+    fontSize: 12,
     flex: 1,
   },
   maisValue: {
     color: "#fff",
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "bold",
   },
   youtubeButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     backgroundColor: "#1a1a1a",
     borderColor: "#FF0000",
   },
   youtubeButtonText: {
     color: "#fff",
     fontWeight: "bold",
+    fontSize: 13,
   },
   youtubeSub: {
     color: "#666",
-    fontSize: 12,
-    marginTop: 8,
+    fontSize: 11,
+    marginTop: 6,
   },
 });
