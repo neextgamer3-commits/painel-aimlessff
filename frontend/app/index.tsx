@@ -311,21 +311,22 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 255, 0, 0.1)",
   },
   menuIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     backgroundColor: "#2a2a2a",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 8,
+    marginBottom: 4,
   },
   menuIconContainerActive: {
     backgroundColor: "#00FF00",
   },
   menuLabel: {
-    fontSize: 11,
+    fontSize: 10,
     color: "#888",
     fontWeight: "500",
+    textAlign: "center",
   },
   menuLabelActive: {
     color: "#00FF00",
